@@ -2,3 +2,6 @@
 .omc/
 !.omc/skills/
 nul
+
+# local environment variables (docker-compose secrets)
+.env

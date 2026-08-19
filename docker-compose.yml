@@ -1,0 +1,22 @@
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: yarmirror-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-yarmirror}
+      POSTGRES_USER: ${POSTGRES_USER:-yarmirror}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-yarmirror}
+    ports:
+      - "5433:5432"
+    volumes:
+      - yarmirror_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-yarmirror} -d ${POSTGRES_DB:-yarmirror}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  yarmirror_pgdata:
+    name: yarmirror_pgdata

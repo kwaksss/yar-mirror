@@ -30,9 +30,9 @@ public class KakaoOAuthProviderAdapter extends AbstractOAuthProviderAdapter {
     private String extractNickname(JsonNode body) {
         JsonNode profileNickname = body.path("kakao_account").path("profile").path("nickname");
         if (profileNickname.isTextual() && !profileNickname.asText().isBlank()) {
-            return profileNickname.asText();
+            return truncateNickname(profileNickname.asText());
         }
         JsonNode legacyNickname = body.path("properties").path("nickname");
-        return legacyNickname.isTextual() ? legacyNickname.asText() : null;
+        return legacyNickname.isTextual() ? truncateNickname(legacyNickname.asText()) : null;
     }
 }

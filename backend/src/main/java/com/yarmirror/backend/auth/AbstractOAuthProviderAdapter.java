@@ -11,6 +11,9 @@ import org.springframework.web.client.RestClientException;
 
 public abstract class AbstractOAuthProviderAdapter implements OAuthProviderAdapter {
 
+    /** {@code users.nickname}은 {@code VARCHAR(50)}이므로, 50자를 초과하는 값은 저장 전에 잘라냅니다. */
+    protected static final int MAX_NICKNAME_LENGTH = 50;
+
     private final RestClient restClient;
     private final OAuthProperties.Provider config;
 
@@ -40,6 +43,14 @@ public abstract class AbstractOAuthProviderAdapter implements OAuthProviderAdapt
     }
 
     protected abstract OAuthUserInfo parseUserInfo(JsonNode body);
+
+    /** Provider에서 전달받은 닉네임을 {@code users.nickname}에 저장 가능한 길이(50자)로 제한합니다. */
+    protected static String truncateNickname(String nickname) {
+        if (nickname != null && nickname.length() > MAX_NICKNAME_LENGTH) {
+            return nickname.substring(0, MAX_NICKNAME_LENGTH);
+        }
+        return nickname;
+    }
 
     private String exchangeAuthorizationCode(OAuthLoginCommand command) {
         if (!command.hasAuthorizationCode()) {

@@ -39,6 +39,8 @@ app:
       redirect-uri: ${GOOGLE_REDIRECT_URI:}
       token-uri: ${GOOGLE_TOKEN_URI:https://oauth2.googleapis.com/token}
       user-info-uri: ${GOOGLE_USER_INFO_URI:https://www.googleapis.com/oauth2/v3/userinfo}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:8081}
   storage:
     bucket: ${STORAGE_BUCKET:yar-mirror-local}
     public-base-url: ${STORAGE_PUBLIC_BASE_URL:http://localhost:8080/local-storage}

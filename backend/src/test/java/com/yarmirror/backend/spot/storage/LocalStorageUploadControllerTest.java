@@ -1,7 +1,9 @@
 package com.yarmirror.backend.spot.storage;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.yarmirror.backend.auth.JwtAuthenticationFilter;
@@ -19,6 +21,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
@@ -75,6 +78,36 @@ class LocalStorageUploadControllerTest {
 
         assertThat(storage.objectExistsAtUrl(photoUrl)).isTrue();
         assertThat(Files.readString(storageRoot.resolve(OBJECT_KEY))).isEqualTo("photo-bytes");
+    }
+
+    @Test
+    void servesAnUploadedPhotoWithoutAuthentication() throws Exception {
+        // given
+        String objectKey = "spots/7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d.png";
+        storage.store(objectKey, "png-bytes".getBytes(StandardCharsets.UTF_8));
+
+        // when, then
+        mockMvc.perform(get("/local-storage/" + objectKey))
+                .andExpect(status().isOk())
+                .andExpect(content().contentType(MediaType.IMAGE_PNG))
+                .andExpect(content().bytes("png-bytes".getBytes(StandardCharsets.UTF_8)));
+    }
+
+    @Test
+    void returnsNotFoundForAPhotoThatWasNeverUploaded() throws Exception {
+        // given
+        String objectKey = "spots/0e1d2c3b-4a59-4687-b7a6-958473625140.jpg";
+
+        // when, then
+        mockMvc.perform(get("/local-storage/" + objectKey))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void rejectsADownloadForAKeyItDidNotMint() throws Exception {
+        // when, then
+        mockMvc.perform(get("/local-storage/spots/not-a-uuid.jpg"))
+                .andExpect(status().isBadRequest());
     }
 
     @Test

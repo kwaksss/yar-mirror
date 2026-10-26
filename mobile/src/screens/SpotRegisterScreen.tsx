@@ -206,7 +206,8 @@ const styles = StyleSheet.create({
     paddingVertical: 9,
   },
   secondaryButtonText: { fontSize: 14, fontWeight: '600' },
-  preview: { width: '100%', height: 220, borderRadius: 10, backgroundColor: '#eee' },
+  // 상세 화면과 같은 3:4(세로형 4:3) 비율로 미리 보여준다.
+  preview: { width: '100%', aspectRatio: 3 / 4, borderRadius: 10, backgroundColor: '#eee' },
   input: {
     borderWidth: 1,
     borderColor: '#ddd',

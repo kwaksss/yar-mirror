@@ -38,8 +38,9 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 // /local-storage/** stands in for a presigned S3 PUT, which is likewise unauthenticated;
                 // it disappears with the local storage adapter once real credentials exist.
+                // /error는 sendError()가 내부 포워드하는 경로다. 막아 두면 404/405/500이 전부 401로 가려진다.
                 .authorizeHttpRequests(auth -> auth.requestMatchers(
-                                "/auth/login/**", "/auth/refresh", "/local-storage/**")
+                                "/auth/login/**", "/auth/refresh", "/local-storage/**", "/error")
                         .permitAll()
                         .anyRequest()
                         .authenticated())

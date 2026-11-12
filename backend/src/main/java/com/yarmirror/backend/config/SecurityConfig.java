@@ -3,6 +3,7 @@ package com.yarmirror.backend.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.yarmirror.backend.auth.JwtAuthenticationFilter;
 import com.yarmirror.backend.common.ErrorResponse;
+import java.util.ArrayList;
 import java.util.List;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -28,25 +29,40 @@ public class SecurityConfig {
             HttpSecurity http,
             JwtAuthenticationFilter jwtAuthenticationFilter,
             ObjectMapper objectMapper,
-            CorsConfigurationSource corsConfigurationSource)
+            CorsConfigurationSource corsConfigurationSource,
+            @Value("${app.storage.type:local}") String storageType)
             throws Exception {
+        String[] publicPaths = publicPaths(storageType);
         return http.csrf(csrf -> csrf.disable())
                 // 인증 필터보다 먼저 CORS를 처리해야 preflight(OPTIONS)와 401 응답에도 CORS 헤더가 붙는다.
                 .cors(cors -> cors.configurationSource(corsConfigurationSource))
                 .httpBasic(basic -> basic.disable())
                 .formLogin(form -> form.disable())
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-                // /local-storage/** stands in for a presigned S3 PUT, which is likewise unauthenticated;
-                // it disappears with the local storage adapter once real credentials exist.
-                // /error는 sendError()가 내부 포워드하는 경로다. 막아 두면 404/405/500이 전부 401로 가려진다.
-                .authorizeHttpRequests(auth -> auth.requestMatchers(
-                                "/auth/login/**", "/auth/refresh", "/local-storage/**", "/error")
+                .authorizeHttpRequests(auth -> auth.requestMatchers(publicPaths)
                         .permitAll()
                         .anyRequest()
                         .authenticated())
                 .exceptionHandling(handling -> handling.authenticationEntryPoint(unauthorizedEntryPoint(objectMapper)))
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
                 .build();
+    }
+
+    /**
+     * 인증 없이 열어 두는 경로.
+     *
+     * <ul>
+     *   <li>{@code /error} — {@code sendError()}가 내부 포워드하는 경로다. 막아 두면 404/405/500이 전부 401로 가려진다.</li>
+     *   <li>{@code /local-storage/**} — 로컬 스토리지({@code app.storage.type=local})에서만 연다. presigned PUT과
+     *       공개 읽기를 흉내 내는 개발용 엔드포인트이며, {@code s3}에서는 클라이언트가 버킷에 직접 접근한다.</li>
+     * </ul>
+     */
+    static String[] publicPaths(String storageType) {
+        List<String> paths = new ArrayList<>(List.of("/auth/login/**", "/auth/refresh", "/error"));
+        if ("local".equalsIgnoreCase(storageType)) {
+            paths.add("/local-storage/**");
+        }
+        return paths.toArray(String[]::new);
     }
 
     /**

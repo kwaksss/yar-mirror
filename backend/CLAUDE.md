@@ -71,8 +71,8 @@ autoconfiguration을 제외하고 부팅하고, 나머지는 `@WebMvcTest` 또�
 ## 인증 (auth)
 
 - **Stateless JWT** (jjwt, HS256). `SecurityConfig`는 세션을 만들지 않고 CSRF/formLogin/httpBasic을
-  끈다. `permitAll`: `/auth/login/**`, `/auth/refresh`, `/local-storage/**`, `/error`(에러 포워드가 401로
-  가려지지 않도록). 그 외 전부 인증 필요.
+  끈다. `permitAll`: `/auth/login/**`, `/auth/refresh`, `/error`(에러 포워드가 401로 가려지지 않도록),
+  그리고 `app.storage.type=local`일 때만 `/local-storage/**`. 그 외 전부 인증 필요.
   인증 실패는 `ErrorResponse` JSON + 401.
 - `JwtAuthenticationFilter`가 `Authorization: Bearer` 헤더를 파싱해
   `AuthenticatedUser(id, nickname)` principal을 SecurityContext에 넣는다. 컨트롤러는
@@ -107,14 +107,26 @@ autoconfiguration을 제외하고 부팅하고, 나머지는 `@WebMvcTest` 또�
 3. `POST /spots/{id}/confirm-upload` — 오브젝트 존재(HEAD 상당)를 확인한 뒤 `CONFIRMED`로 전환.
    업로더 본인만 가능(`ForbiddenException`), 오브젝트 없으면 409(`UploadNotFoundException`).
 
-`LocalFileObjectStorageAdapter`는 S3 대체용 로컬 파일 구현이고, `LocalStorageUploadController`가
-`/local-storage/**`에서 바이트를 받고(PUT) 내려준다(GET, S3 공개 읽기 대체). 실제 S3 도입 시 두 클래스와 `permitAll` 규칙을 삭제할 것.
-오브젝트 키는 `spots/{uuid}.{jpg|png|webp}` 형식이며 정규식으로 검증해 path traversal을 차단한다.
+저장소 구현은 `app.storage.type`(`STORAGE_TYPE`)으로 고르며, 둘 중 하나만 빈으로 등록된다.
+
+- `local`(기본, 로컬 개발): `LocalFileObjectStorageAdapter`가 디스크에 저장하고,
+  `LocalStorageUploadController`가 `/local-storage/**`에서 바이트를 받고(PUT) 내려준다(GET, 공개 읽기 대체).
+- `s3`(`prod` 프로필 기본값): `S3ObjectStorageAdapter`가 AWS SDK v2로 S3 호환 스토리지(Cloudflare R2)를
+  쓴다. 클라이언트·프리사이너 생성은 `config/S3StorageConfig`, 접속 정보는 `S3StorageProperties`
+  (`app.storage.s3.*`). path-style 주소를 쓰고, 체크섬 헤더는 필요할 때만 보낸다(R2 호환). presign은
+  `Content-Type`을 서명에 포함하므로 클라이언트는 같은 헤더로 PUT해야 한다. 확인 단계(HEAD)에서 10MB를
+  넘는 오브젝트는 삭제하고 미업로드로 처리한다. 필수 설정이 비면 기동 시 실패한다.
+- `StorageTypeGuard`가 `local`/`s3` 이외의 값(값 뒤 공백·인라인 주석 포함)이면 기동 시 실패시킨다.
+- 테스트는 개발자 로컬 `.env`의 `STORAGE_TYPE`에 영향받지 않도록, 스토리지에 의존하는 테스트에서
+  `app.storage.type=local`을 명시한다.
+
+오브젝트 키는 `spots/{uuid}.{jpg|png|webp}` 형식이며 `ObjectKeys`가 정규식으로 검증해 path traversal을
+차단한다. 두 어댑터 모두 공개 URL ↔ 키 변환에 같은 유틸을 쓴다.
 
 ## 설정 & 스키마
 
 - `BackendApplication`에 `@ConfigurationPropertiesScan`. `config/`의 프로퍼티 레코드
-  (`JwtProperties`, `OAuthProperties`, `SpotProperties`, `StorageProperties`)가 `application.yml`의
+  (`JwtProperties`, `OAuthProperties`, `SpotProperties`, `StorageProperties`, `S3StorageProperties`)가 `application.yml`의
   `app.*`에서 바인딩된다. `AppConfig`가 `Clock`(systemUTC)과 공용 `RestClient` 빈을 제공한다.
   시간이 관여하는 모든 곳에 `Clock`을 주입하고, 테스트는 고정 `Clock`으로 교체한다.
 - `application.yml`은 multi-document. 프로필 `local`(기본)/`prod`. `.env`는

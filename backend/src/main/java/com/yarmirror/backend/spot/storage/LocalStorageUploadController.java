@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.io.FileSystemResource;
 import org.springframework.core.io.Resource;
 import org.springframework.http.MediaType;
@@ -16,11 +17,13 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.servlet.HandlerMapping;
 
 /**
- * Development stand-in for an S3 bucket accepting a presigned PUT. Replace both this controller and
- * {@link LocalFileObjectStorageAdapter} with a real S3 adapter once credentials exist — clients will
- * then upload directly to the bucket and this endpoint disappears.
+ * Development stand-in for an S3 bucket accepting a presigned PUT.
+ *
+ * <p>{@link LocalFileObjectStorageAdapter}와 함께 {@code app.storage.type=local}일 때만 등록된다.
+ * {@code s3}에서는 클라이언트가 버킷에 직접 업로드하므로 이 엔드포인트는 존재하지 않는다.
  */
 @RestController
+@ConditionalOnProperty(prefix = "app.storage", name = "type", havingValue = "local", matchIfMissing = true)
 @RequestMapping("/local-storage")
 public class LocalStorageUploadController {
 

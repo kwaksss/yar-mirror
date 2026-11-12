@@ -31,7 +31,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
                     + "org.springframework.boot.autoconfigure.jdbc.DataSourceTransactionManagerAutoConfiguration,"
                     + "org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration,"
                     + "org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration,"
-                    + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration"
+                    + "org.springframework.boot.autoconfigure.flyway.FlywayAutoConfiguration",
+            // 개발자 로컬 .env 의 STORAGE_TYPE 과 무관하게 로컬 스토리지로 검증한다.
+            "app.storage.type=local"
         })
 class ApplicationWiringTest {
 

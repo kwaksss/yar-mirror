@@ -29,7 +29,8 @@ import org.springframework.test.web.servlet.MockMvc;
  * The presigned upload URL must be reachable without a JWT, exactly like the S3 PUT it stands in for.
  * Without this the whole PENDING -> CONFIRMED transition is unreachable.
  */
-@WebMvcTest(LocalStorageUploadController.class)
+// 개발자 로컬 .env 의 STORAGE_TYPE 과 무관하게 /local-storage 엔드포인트가 열린 상태로 검증한다.
+@WebMvcTest(controllers = LocalStorageUploadController.class, properties = "app.storage.type=local")
 @Import({SecurityConfig.class, JwtAuthenticationFilter.class, LocalStorageUploadControllerTest.TestStorage.class})
 class LocalStorageUploadControllerTest {
 

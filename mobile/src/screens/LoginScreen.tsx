@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -7,12 +7,21 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../auth/AuthContext';
-import { OAuthCancelledError, type SocialProvider } from '../auth/oauth';
+import {
+  OAuthCancelledError,
+  prepareAuthorization,
+  type SocialProvider,
+} from '../auth/oauth';
 
 export function LoginScreen() {
   const { signIn } = useAuth();
   const [pending, setPending] = useState<SocialProvider | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // 버튼을 누르는 즉시 팝업을 열 수 있도록 인증 URL 을 미리 만든다. 시도가 끝나면 다음 시도용으로 다시 만든다.
+  useEffect(() => {
+    if (pending === null) prepareAuthorization('kakao').catch(() => undefined);
+  }, [pending]);
 
   const handleLogin = async (provider: SocialProvider) => {
     setPending(provider);

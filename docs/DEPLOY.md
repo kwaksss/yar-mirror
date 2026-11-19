@@ -7,7 +7,7 @@
 > 비용은 **월 약 $12**로 맞춘다. 배포는 `main` 머지 한 번으로 끝낸다.
 > Cloudflare 설정 상세: [docs/CLOUDFLARE.md](./CLOUDFLARE.md)
 
-## 0. 진행 상황 (2026-11-19 기준)
+## 0. 진행 상황 (2026-11-20 기준)
 
 실제 도메인: 웹 `yarmirror.com.de` · API `api.yarmirror.com.de` · 사진 `photos.yarmirror.com.de`
 
@@ -32,20 +32,40 @@
   - `/opt/yar-mirror/.env` 작성(권한 600). 빈 키는 `GOOGLE_REDIRECT_URI`만 남음
 - [x] (2026-11-19) GitHub `production` 환경 + 시크릿 3개 등록 (`SSH_HOST`, `SSH_USER`, `SSH_PRIVATE_KEY`)
 - [x] (2026-11-19) 카카오 콘솔에 Redirect URI `https://yarmirror.com.de` 등록
+- [x] (2026-11-19) 첫 배포 성공 ([4.3](#43-github)). `dev` → `main` 머지 커밋 `9245ad3`
+  - 첫 실행은 `SSH_PRIVATE_KEY` 값 오류(`ssh: no key found`)로 실패했다. 값을 다시 넣고 재실행해 성공했다.
+  - 컨테이너 `app`, `caddy`, `db(healthy)` 기동 확인
+  - Flyway `v1 init schema` 적용. `users`, `spots`, `refresh_tokens` 테이블 확인
+  - Caddy가 Let's Encrypt 인증서 발급 (만료 2027-02-17). HTTP는 HTTPS로 308 리다이렉트
+  - `https://api.yarmirror.com.de` 응답 확인 (인증 없는 요청은 401)
+  - `backup.sh` 수동 실행 → R2 업로드 성공 (`20261119T143013Z`)
+
+- [x] (2026-11-20) Cloudflare Pages 웹앱 배포 ([4.4](#44-웹앱-cloudflare-pages))
+  - 프로젝트 `yar-mirror` (`yar-mirror.pages.dev`), 루트 `mobile`, 출력 `dist`
+  - 커스텀 도메인 `yarmirror.com.de` 200 응답
+  - 번들의 API 주소가 `https://api.yarmirror.com.de`인지 확인
+  - API CORS 사전 요청에 `Access-Control-Allow-Origin: https://yarmirror.com.de` 응답 확인
+  - 카카오 JavaScript SDK 도메인에 운영 도메인 2개 등록. 지도 SDK 200 확인
+  - PC 브라우저에서 카카오 로그인 성공
 
 ### 다음에 여기서 시작
-▶ 2026-11-19 작업 지점이다.
+▶ 2026-11-20 작업 지점이다.
 
-1. **`dev` → `main` 머지로 첫 배포** → [4.3](#43-github) ← **여기부터 시작**
-   - `main`에는 아직 `.github/workflows/`가 없다. 그래서 수동 실행(workflow_dispatch) 버튼이 없다.
-   - `dev` → `main` PR을 머지하면 배포 워크플로가 자동 실행된다.
-2. **Cloudflare Pages 웹앱 연결** → [4.4](#44-웹앱-cloudflare-pages)
+1. **모바일 브라우저 로그인 팝업 수정 배포 후 확인** ← **여기부터 시작**
+   - 증상: 휴대폰에서 로그인 시 `Popup window was blocked` 오류
+   - 원인: `promptAsync`가 PKCE URL을 `await`로 만든 뒤 `window.open`을 호출한다.
+   - 수정: 로그인 화면에서 인증 URL을 미리 만든다 (`prepareAuthorization`).
+   - `main` 머지 후 휴대폰에서 로그인을 다시 확인한다.
+2. **`www` 커스텀 도메인 연결** → [4.4](#44-웹앱-cloudflare-pages) 3단계
 3. **스모크 테스트** → [4.5](#45-스모크-테스트)
 
 ### 확인 필요
 - Lightsail 자동 스냅샷을 아직 켜지 않았다 (4.2-4단계, 선택).
 - 방화벽 443 규칙의 출발지는 IPv4만이다. AAAA 레코드를 추가하면 IPv6도 연다.
-- 카카오 Redirect URI가 웹앱이 실제로 보내는 값과 같은지 확인하지 않았다 (4.4 배포 후 확인).
+- `www.yarmirror.com.de`는 DNS 레코드가 없다 (2026-11-20). Pages 커스텀 도메인에 추가한다.
+- Pages 환경변수를 Preview에도 넣었는지 확인하지 않았다. 안 넣었으면 Preview 빌드가 `localhost:8080`을 쓴다.
+- `/actuator/health`도 401을 돌려준다. 헬스 체크용 경로를 공개할지 정한다.
+- R2 콘솔에서 백업 파일을 직접 보지 않았다. 스크립트 출력으로만 확인했다.
 - 로컬 `backend/.env`의 `STORAGE_TYPE` 줄을 확인한다.
   - 줄 뒤에 인라인 주석이 있으면 지운다 (`STORAGE_TYPE=s3` 또는 줄 삭제).
   - 주석이 남아 있으면 로컬 서버가 기동에 실패한다.
@@ -204,6 +224,8 @@ CI/CD      : GitHub Actions → GHCR → SSH 로 deploy.sh 실행
    ```
 
 ### 4.3 GitHub
+상태: 완료 (2026-11-19, `9245ad3`)
+
 1. Settings → Environments에서 `production` 환경을 만든다. 시크릿 3개를 등록한다.
    - `SSH_HOST` (고정 IP), `SSH_USER` (`ubuntu`), `SSH_PRIVATE_KEY`
 2. Actions에서 `Deploy backend`를 수동 실행(workflow_dispatch)한다. 또는 `main`에 머지한다.

@@ -1,7 +1,7 @@
 # Cloudflare 설정 기록
 
 > 관련 문서: [DEPLOY.md](./DEPLOY.md) (전체 배포 계획과 진행 상황)
-> 마지막 갱신: 2026-11-19
+> 마지막 갱신: 2026-11-20
 >
 > 이 문서에는 **비밀 값(API 토큰, Secret Access Key, account ID)을 적지 않는다.**
 > 실제 값은 비밀번호 관리자와 각 `.env`에만 둔다.
@@ -11,7 +11,7 @@
 | 항목 | 값 | 상태 |
 |---|---|---|
 | 도메인 (zone) | `yarmirror.com.de` | ✅ Cloudflare 네임서버 사용 중 |
-| 웹앱 | `yarmirror.com.de` (+ `www`) → Cloudflare Pages | ⬜ 미설정 |
+| 웹앱 | `yarmirror.com.de` (+ `www`) → Cloudflare Pages | ✅ 루트 도메인 (2026-11-20), ⬜ `www` 미연결 |
 | API | `api.yarmirror.com.de` → Lightsail 고정 IP (A 레코드, DNS only) | ✅ `43.200.25.166` (2026-11-19) |
 | 사진 버킷 | R2 `yar-mirror-photos` | ✅ 생성 |
 | 사진 공개 도메인 | `photos.yarmirror.com.de` → `yar-mirror-photos` | ✅ Active / Access Enabled |
@@ -35,7 +35,8 @@
 |---|---|---|---|---|
 | `photos` | (R2 커스텀 도메인이 자동 생성) | R2 | 프록시됨 | ✅ |
 | `api` | A | `43.200.25.166` (Lightsail 고정 IP) | **DNS only (회색 구름)** | ✅ |
-| `@`, `www` | (Pages 커스텀 도메인이 자동 생성) | Pages | 프록시됨 | ⬜ |
+| `@` | (Pages 커스텀 도메인이 자동 생성) | Pages | 프록시됨 | ✅ |
+| `www` | (Pages 커스텀 도메인이 자동 생성) | Pages | 프록시됨 | ⬜ |
 
 - `api`는 **반드시 DNS only**로 둔다.
   - 서버의 Caddy가 Let's Encrypt 인증서를 직접 받아야 하기 때문이다.
@@ -146,7 +147,10 @@ STORAGE_SECRET_ACCESS_KEY=<Secret Access Key>
 ---
 
 ## 4. Cloudflare Pages 웹앱
-상태: 미설정
+상태: 배포 완료 (2026-11-20). `www` 커스텀 도메인만 남음.
+
+- 프로젝트 `yar-mirror` (`yar-mirror.pages.dev`)
+- 대시보드의 Create 화면은 Workers가 기본이다. 아래 **Continue to Pages** 링크로 들어간다.
 
 [DEPLOY.md](./DEPLOY.md) 4.4 절차를 따른다. 요약:
 

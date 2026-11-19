@@ -1,9 +1,10 @@
 # Cloudflare 설정 기록
 
 > 관련 문서: [DEPLOY.md](./DEPLOY.md) (전체 배포 계획과 진행 상황)
-> 마지막 갱신: 2026-11-12
+> 마지막 갱신: 2026-11-19
 >
-> 이 문서에는 **비밀 값(API 토큰, Secret Access Key, account ID)을 적지 않는다.** 실제 값은 비밀번호 관리자와 각 `.env`에만 둔다.
+> 이 문서에는 **비밀 값(API 토큰, Secret Access Key, account ID)을 적지 않는다.**
+> 실제 값은 비밀번호 관리자와 각 `.env`에만 둔다.
 
 ## 한눈에 보기
 
@@ -11,12 +12,12 @@
 |---|---|---|
 | 도메인 (zone) | `yarmirror.com.de` | ✅ Cloudflare 네임서버 사용 중 |
 | 웹앱 | `yarmirror.com.de` (+ `www`) → Cloudflare Pages | ⬜ 미설정 |
-| API | `api.yarmirror.com.de` → Lightsail 고정 IP (A 레코드, DNS only) | ⬜ 미설정 (서버 생성 후) |
+| API | `api.yarmirror.com.de` → Lightsail 고정 IP (A 레코드, DNS only) | ✅ `43.200.25.166` (2026-11-19) |
 | 사진 버킷 | R2 `yar-mirror-photos` | ✅ 생성 |
 | 사진 공개 도메인 | `photos.yarmirror.com.de` → `yar-mirror-photos` | ✅ Active / Access Enabled |
 | 사진 버킷 API 토큰 | `yar-mirror-photos` 전용, Object Read & Write | ✅ 발급 (로컬 `backend/.env`에 입력) |
-| 백업 버킷 | R2 `yar-mirror-backups` | ⬜ 확인 필요 |
-| 백업 버킷 API 토큰 | `yar-mirror-backups` 전용, Object Read & Write | ⬜ 확인 필요 |
+| 백업 버킷 | R2 `yar-mirror-backups` (30일 삭제 lifecycle) | ✅ 생성 (2026-11-18) |
+| 백업 버킷 API 토큰 | `yar-mirror-backups-server`, `yar-mirror-backups` 전용, Object Read & Write | ✅ 발급 (2026-11-18), 서버 `.env` 입력 (2026-11-19) |
 
 ---
 
@@ -24,21 +25,25 @@
 
 - zone: `yarmirror.com.de`
 - 네임서버: `gabriel.ns.cloudflare.com`, `raquel.ns.cloudflare.com`
-- `.com.de`는 `.de` 공식 2단계 도메인이 아니라 민간 업체가 운영하는 하위 도메인이다. 갱신 가격과 갱신일을 따로 챙긴다.
+- `.com.de`는 `.de` 공식 2단계 도메인이 아니다.
+  - 민간 업체가 운영하는 하위 도메인이다.
+  - 갱신 가격과 갱신일을 따로 챙긴다.
 
 ### DNS 레코드
 
 | 이름 | 타입 | 값 | 프록시 | 상태 |
 |---|---|---|---|---|
 | `photos` | (R2 커스텀 도메인이 자동 생성) | R2 | 프록시됨 | ✅ |
-| `api` | A | Lightsail 고정 IP | **DNS only (회색 구름)** | ⬜ |
+| `api` | A | `43.200.25.166` (Lightsail 고정 IP) | **DNS only (회색 구름)** | ✅ |
 | `@`, `www` | (Pages 커스텀 도메인이 자동 생성) | Pages | 프록시됨 | ⬜ |
 
-- `api`는 **반드시 DNS only**로 둔다. 서버의 Caddy가 Let's Encrypt 인증서를 직접 받아야 하기 때문이다. 프록시로 바꾸려면 인증서를 Cloudflare Origin CA로 교체해야 한다 ([DEPLOY.md](./DEPLOY.md) 9장).
+- `api`는 **반드시 DNS only**로 둔다.
+  - 서버의 Caddy가 Let's Encrypt 인증서를 직접 받아야 하기 때문이다.
+  - 프록시로 바꾸려면 인증서를 Cloudflare Origin CA로 교체한다 ([DEPLOY.md](./DEPLOY.md) 9장).
 
 ---
 
-## 2. R2 — 사진 버킷 `yar-mirror-photos`
+## 2. R2 사진 버킷 `yar-mirror-photos`
 
 ### 생성 옵션
 | 옵션 | 선택 | 이유 |
@@ -53,10 +58,12 @@
 | Minimum TLS | 1.2 (1.0/1.1은 폐기된 버전, 1.3은 구형 Android 호환 문제) |
 | Public Development URL (`r2.dev`) | **Disabled** 유지 (개발용, 요청 수 제한 있음) |
 
-> Access가 `Enabled`가 아니면 R2가 "Object not found / not publicly accessible" 404 페이지를 돌려준다.
+> Access가 `Enabled`가 아니면 R2가 404 페이지를 돌려준다.
+> 페이지 문구는 "Object not found / not publicly accessible"이다.
 
 ### CORS 정책
-웹앱에서 업로드 URL로 직접 PUT하려면 필요하다. 네이티브 앱은 CORS의 영향을 받지 않는다.
+- 웹앱에서 업로드 URL로 직접 PUT하려면 필요하다.
+- 네이티브 앱은 CORS의 영향을 받지 않는다.
 
 ```json
 [
@@ -69,12 +76,14 @@
 ]
 ```
 
-- 로컬 웹(`expo start --web`, `http://localhost:8081`)에서 R2로 업로드를 테스트하려면 `AllowedOrigins`에 `http://localhost:8081`을 **임시로** 추가하고, 끝나면 뺀다.
+- 로컬 웹(`expo start --web`, `http://localhost:8081`)에서 R2 업로드를 테스트할 수 있다.
+  - `AllowedOrigins`에 `http://localhost:8081`을 **임시로** 추가한다.
+  - 테스트가 끝나면 뺀다.
 
 ### API 토큰
-- 위치: R2 Overview → **Manage API tokens** → **Create Account API token**
-- 이름: `yar-mirror-photos-app`, 권한 **Object Read & Write**, 대상 버킷 **`yar-mirror-photos`만**
-- 발급 화면에 나오는 값과 용도:
+1. R2 Overview → **Manage API tokens** → **Create Account API token**으로 간다.
+2. 이름 `yar-mirror-photos-app`, 권한 **Object Read & Write**, 대상 버킷 **`yar-mirror-photos`만** 으로 만든다.
+3. 발급 화면의 값을 아래 용도로 쓴다.
 
 | 값 | 용도 |
 |---|---|
@@ -110,16 +119,19 @@ STORAGE_SECRET_ACCESS_KEY=<Secret Access Key>
 
 ---
 
-## 3. R2 — 백업 버킷 `yar-mirror-backups` (확인 필요)
+## 3. R2 백업 버킷 `yar-mirror-backups`
+상태: 1~4단계 완료 (2026-11-18). 5단계는 서버 생성 후 한다.
 
-아직 생성 여부를 확인하지 않았다. 없으면 아래대로 만든다.
+- lifecycle 규칙은 prefix 없이 버킷 전체에 적용했다.
+- 5단계(서버 `.env` 입력)는 [DEPLOY.md 4.2-8](./DEPLOY.md#42-서버-lightsail)에서 한다.
 
-1. 버킷 생성: 이름 `yar-mirror-backups`, Location Automatic, Storage class **Standard**
-   - 덤프가 수 MB라 무료 한도 안이다. IA는 30일 최소 보관 요금이 30일 삭제 규칙과 겹쳐 이득이 없다.
-2. 공개 접근: **커스텀 도메인 연결 안 함, `r2.dev` Disabled** (비공개 유지)
-3. Settings → **Object lifecycle rules**: 30일 지난 객체 삭제
-4. API 토큰: 이름 `yar-mirror-backups-server`, Object Read & Write, 대상 버킷 `yar-mirror-backups`만
-5. 서버 `/opt/yar-mirror/.env`에 입력:
+1. 버킷을 만든다: 이름 `yar-mirror-backups`, Location Automatic, Storage class **Standard**
+   - 덤프가 수 MB라 무료 한도 안이다.
+   - IA는 30일 최소 보관 요금이 붙는다. 30일 삭제 규칙과 겹쳐 이득이 없다.
+2. 공개 접근을 막는다: **커스텀 도메인 연결 안 함, `r2.dev` Disabled**
+3. Settings → **Object lifecycle rules**에서 30일 지난 객체를 삭제하는 규칙을 만든다.
+4. API 토큰을 만든다: 이름 `yar-mirror-backups-server`, Object Read & Write, 대상 버킷 `yar-mirror-backups`만
+5. 서버 `/opt/yar-mirror/.env`에 입력한다.
    ```
    BACKUP_R2_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
    BACKUP_R2_BUCKET=yar-mirror-backups
@@ -127,11 +139,14 @@ STORAGE_SECRET_ACCESS_KEY=<Secret Access Key>
    BACKUP_R2_SECRET_ACCESS_KEY=<Secret Access Key>
    ```
 
-> 사진용과 백업용 토큰을 나누는 이유: 한쪽 키가 유출되어도 다른 버킷은 안전하다. 특히 앱 서버가 쓰는 사진 토큰으로 백업을 지울 수 없게 한다.
+> 사진용 토큰과 백업용 토큰을 나누는 이유가 있다.
+> 한쪽 키가 유출되어도 다른 버킷은 안전하다.
+> 특히 앱 서버가 쓰는 사진 토큰으로는 백업을 지울 수 없다.
 
 ---
 
-## 4. Cloudflare Pages — 웹앱 (미설정)
+## 4. Cloudflare Pages 웹앱
+상태: 미설정
 
 [DEPLOY.md](./DEPLOY.md) 4.4 절차를 따른다. 요약:
 

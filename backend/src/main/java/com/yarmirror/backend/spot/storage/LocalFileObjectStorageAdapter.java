@@ -6,21 +6,20 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
-import java.util.regex.Pattern;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
  * Local filesystem stand-in for S3-compatible storage: the MVP has no cloud credentials yet, so
  * presigning is simulated and the HEAD check becomes a file lookup under {@code app.storage.local-root}.
- * Bytes arrive through {@link LocalStorageUploadController}; with real S3 both classes are deleted and
- * clients PUT straight to the bucket.
+ * Bytes arrive through {@link LocalStorageUploadController}.
+ *
+ * <p>{@code app.storage.type=local}(기본값)일 때만 등록된다. 운영({@code prod})은 {@code s3}로
+ * {@link S3ObjectStorageAdapter}를 쓰고, 클라이언트는 버킷에 직접 PUT한다.
  */
 @Component
+@ConditionalOnProperty(prefix = "app.storage", name = "type", havingValue = "local", matchIfMissing = true)
 public class LocalFileObjectStorageAdapter implements ObjectStoragePort {
-
-    /** Only keys this adapter itself mints are accepted, which also rules out path traversal. */
-    private static final Pattern OBJECT_KEY =
-            Pattern.compile("spots/[0-9a-fA-F-]{36}\\.(jpg|png|webp)");
 
     private final StorageProperties properties;
     private final Clock clock;
@@ -40,12 +39,12 @@ public class LocalFileObjectStorageAdapter implements ObjectStoragePort {
 
     @Override
     public String publicUrl(String objectKey) {
-        return trimTrailingSlash(properties.publicBaseUrl()) + "/" + objectKey;
+        return ObjectKeys.publicUrl(properties.publicBaseUrl(), objectKey);
     }
 
     @Override
     public boolean objectExistsAtUrl(String photoUrl) {
-        String objectKey = objectKeyOf(photoUrl);
+        String objectKey = ObjectKeys.fromPublicUrl(properties.publicBaseUrl(), photoUrl);
         return objectKey != null && Files.isRegularFile(resolve(objectKey));
     }
 
@@ -56,22 +55,10 @@ public class LocalFileObjectStorageAdapter implements ObjectStoragePort {
     }
 
     public Path resolve(String objectKey) {
-        if (objectKey == null || !OBJECT_KEY.matcher(objectKey).matches()) {
+        if (!ObjectKeys.isValid(objectKey)) {
             throw new IllegalArgumentException("unsupported object key: " + objectKey);
         }
         return Path.of(properties.localRoot()).resolve(objectKey).normalize();
-    }
-
-    private String objectKeyOf(String photoUrl) {
-        if (photoUrl == null) {
-            return null;
-        }
-        String prefix = trimTrailingSlash(properties.publicBaseUrl()) + "/";
-        if (!photoUrl.startsWith(prefix)) {
-            return null;
-        }
-        String key = photoUrl.substring(prefix.length());
-        return OBJECT_KEY.matcher(key).matches() ? key : null;
     }
 
     private static String trimTrailingSlash(String value) {

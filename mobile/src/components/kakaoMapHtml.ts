@@ -10,6 +10,9 @@ export type KakaoMapHtmlOptions = {
  * Kakao Maps has no React Native SDK, so the map is the JS SDK running inside a
  * WebView. Communication is one JSON channel each way: `postMessage` out,
  * `injectJavaScript` calling `window.MirrorSpot.*` in.
+ *
+ * On web the same HTML runs in an iframe (KakaoMapView.web.tsx): messages go out through
+ * `window.parent.postMessage`, and the parent calls `window.MirrorSpot.*` directly.
  */
 export function buildKakaoMapHtml({ jsKey, center, level }: KakaoMapHtmlOptions): string {
   return `<!DOCTYPE html>
@@ -26,8 +29,12 @@ export function buildKakaoMapHtml({ jsKey, center, level }: KakaoMapHtmlOptions)
   <div id="map"></div>
   <script>
     var send = function (payload) {
+      var data = JSON.stringify(payload);
       if (window.ReactNativeWebView) {
-        window.ReactNativeWebView.postMessage(JSON.stringify(payload));
+        window.ReactNativeWebView.postMessage(data);
+      } else if (window.parent && window.parent !== window) {
+        // 웹에서는 이 HTML 이 iframe 안에서 돌기 때문에 부모 창으로 보낸다.
+        window.parent.postMessage({ source: 'mirrorspot-map', data: data }, '*');
       }
     };
 

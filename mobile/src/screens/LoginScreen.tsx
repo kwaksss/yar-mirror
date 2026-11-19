@@ -47,20 +47,6 @@ export function LoginScreen() {
         )}
       </Pressable>
 
-      <Pressable
-        testID="google-login-button"
-        accessibilityRole="button"
-        disabled={pending !== null}
-        style={[styles.button, styles.googleButton]}
-        onPress={() => handleLogin('google')}
-      >
-        {pending === 'google' ? (
-          <ActivityIndicator color="#1f1f1f" />
-        ) : (
-          <Text style={styles.googleLabel}>Google로 시작하기</Text>
-        )}
-      </Pressable>
-
       {error ? (
         <Text testID="login-error" style={styles.error}>
           {error}
@@ -77,7 +63,5 @@ const styles = StyleSheet.create({
   button: { borderRadius: 10, paddingVertical: 15, alignItems: 'center' },
   kakaoButton: { backgroundColor: '#FEE500' },
   kakaoLabel: { color: '#191600', fontSize: 16, fontWeight: '600' },
-  googleButton: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#dadce0' },
-  googleLabel: { color: '#1f1f1f', fontSize: 16, fontWeight: '600' },
   error: { color: '#c0392b', textAlign: 'center', marginTop: 8 },
 });

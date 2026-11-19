@@ -1,0 +1,9 @@
+.env
+.env.*
+.gradle
+build
+.local-storage
+.omc
+.idea
+*.iml
+CLAUDE.md

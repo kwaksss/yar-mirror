@@ -85,7 +85,8 @@ export function SpotDetailScreen({ route }: RootScreenProps<'SpotDetail'>) {
 const styles = StyleSheet.create({
   centered: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: { padding: 16, gap: 8 },
-  photo: { width: '100%', height: 280, borderRadius: 12, backgroundColor: '#eee' },
+  // 거울샷은 세로 사진이 대부분이라 3:4(세로형 4:3) 비율로 고정한다.
+  photo: { width: '100%', aspectRatio: 3 / 4, borderRadius: 12, backgroundColor: '#eee' },
   photoPlaceholder: { alignItems: 'center', justifyContent: 'center' },
   muted: { color: '#888' },
   name: { fontSize: 22, fontWeight: '700', marginTop: 8 },

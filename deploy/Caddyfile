@@ -1,0 +1,12 @@
+# API 도메인(예: api.example.com)으로 들어온 요청을 Spring Boot로 넘긴다.
+# Let's Encrypt 인증서는 Caddy가 자동으로 발급·갱신한다 (80/443 포트가 열려 있어야 함).
+{$API_DOMAIN} {
+	encode zstd gzip
+
+	# 사진은 R2 로 직접 올라가므로 API 요청 본문은 작다.
+	request_body {
+		max_size 1MB
+	}
+
+	reverse_proxy app:8080
+}

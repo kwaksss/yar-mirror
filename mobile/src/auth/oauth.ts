@@ -1,5 +1,10 @@
 import * as AuthSession from 'expo-auth-session';
+import * as WebBrowser from 'expo-web-browser';
 import { getAppExtra } from '../config/env';
+
+// 웹에서는 로그인이 팝업으로 열리고, 리다이렉트로 돌아온 팝업이 스스로 닫히면서 원래 창에 결과를 넘겨야 한다.
+// 이 호출이 없으면 팝업이 남고 promptAsync가 끝나지 않는다. 네이티브에서는 아무 일도 하지 않는다.
+WebBrowser.maybeCompleteAuthSession();
 
 export type SocialProvider = 'kakao' | 'google';
 

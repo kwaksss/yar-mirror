@@ -3,14 +3,20 @@ package com.yarmirror.backend.common;
 import com.yarmirror.backend.auth.InvalidTokenException;
 import com.yarmirror.backend.auth.OAuthAuthenticationException;
 import com.yarmirror.backend.spot.UploadNotFoundException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.client.HttpStatusCodeException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(NotFoundException.class)
     public ResponseEntity<ErrorResponse> handleNotFound(NotFoundException e) {
@@ -24,7 +30,17 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(OAuthAuthenticationException.class)
     public ResponseEntity<ErrorResponse> handleOAuth(OAuthAuthenticationException e) {
+        log.warn("oauth failure", e);
+        if (e.getCause() instanceof HttpStatusCodeException hsce) {
+            log.warn("oauth failure detail: status={} body={}", hsce.getStatusCode(), hsce.getResponseBodyAsString());
+        }
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse("OAUTH_FAILED", e.getMessage()));
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<ErrorResponse> handleDataIntegrityViolation(DataIntegrityViolationException e) {
+        log.warn("data constraint violation", e);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(new ErrorResponse("DATA_CONSTRAINT", "data constraint violated"));
     }
 
     @ExceptionHandler(ForbiddenException.class)

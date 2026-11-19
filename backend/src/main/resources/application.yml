@@ -39,11 +39,20 @@ app:
       redirect-uri: ${GOOGLE_REDIRECT_URI:}
       token-uri: ${GOOGLE_TOKEN_URI:https://oauth2.googleapis.com/token}
       user-info-uri: ${GOOGLE_USER_INFO_URI:https://www.googleapis.com/oauth2/v3/userinfo}
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:8081}
   storage:
+    # local: 서버 디스크 + /local-storage 엔드포인트(개발용), s3: S3 호환 오브젝트 스토리지(Cloudflare R2)
+    type: ${STORAGE_TYPE:local}
     bucket: ${STORAGE_BUCKET:yar-mirror-local}
     public-base-url: ${STORAGE_PUBLIC_BASE_URL:http://localhost:8080/local-storage}
     presigned-url-ttl-seconds: ${STORAGE_PRESIGN_TTL:600}
     local-root: ${STORAGE_LOCAL_ROOT:./.local-storage}
+    s3:
+      endpoint: ${STORAGE_ENDPOINT:}
+      region: ${STORAGE_REGION:auto}
+      access-key-id: ${STORAGE_ACCESS_KEY_ID:}
+      secret-access-key: ${STORAGE_SECRET_ACCESS_KEY:}
   spot:
     default-radius-meters: ${SPOT_DEFAULT_RADIUS:2000}
     max-radius-meters: ${SPOT_MAX_RADIUS:20000}
@@ -83,6 +92,10 @@ spring:
       maximum-pool-size: ${DB_POOL_SIZE:10}
   jpa:
     show-sql: false
+
+app:
+  storage:
+    type: ${STORAGE_TYPE:s3}
 
 logging:
   level:

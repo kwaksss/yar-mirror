@@ -3,40 +3,13 @@ import { StyleSheet, Text, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { DEFAULT_MAP_LEVEL } from '../config/constants';
 import { getAppExtra } from '../config/env';
-import type {
-  ReverseGeocodeRequest,
-  ReverseGeocodeResult,
-} from '../hooks/useReverseGeocode';
-import type { LatLng, MapRegion } from '../types/geo';
-import type { Spot } from '../types/spot';
+import type { ReverseGeocodeRequest } from '../hooks/useReverseGeocode';
+import type { LatLng } from '../types/geo';
 import { buildKakaoMapHtml } from './kakaoMapHtml';
+import type { KakaoMapMessage, KakaoMapViewProps, MarkerPayload } from './kakaoMapTypes';
 
-export type KakaoMapMessage =
-  | { type: 'ready' }
-  | { type: 'error'; message: string }
-  | ({ type: 'idle' } & MapRegion)
-  | ({ type: 'mapPress' } & LatLng)
-  | { type: 'markerPress'; spotId: number }
-  | ({ type: 'geocode' } & ReverseGeocodeResult);
-
-export type KakaoMapViewProps = {
-  center: LatLng;
-  markers?: Spot[];
-  level?: number;
-  onRegionChange?: (region: MapRegion) => void;
-  onMarkerPress?: (spotId: number) => void;
-  onMapPress?: (position: LatLng) => void;
-  /** Coordinate to reverse-geocode through the already-loaded Kakao JS SDK. */
-  geocodeRequest?: ReverseGeocodeRequest | null;
-  onGeocodeResult?: (result: ReverseGeocodeResult) => void;
-};
-
-type MarkerPayload = {
-  id: number;
-  name: string;
-  latitude: number;
-  longitude: number;
-};
+// 웹 빌드는 KakaoMapView.web.tsx 를 쓰므로, 타입은 두 구현이 공유하는 파일에서 가져와 다시 내보낸다.
+export type { KakaoMapMessage, KakaoMapViewProps } from './kakaoMapTypes';
 
 const setMarkersScript = (payload: MarkerPayload[]) =>
   `window.MirrorSpot && window.MirrorSpot.setMarkers(${JSON.stringify(payload)}); true;`;

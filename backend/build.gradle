@@ -30,6 +30,12 @@ dependencies {
 	implementation 'org.hibernate.orm:hibernate-spatial'
 	implementation 'org.locationtech.jts:jts-core:1.19.0'
 
+	// 사진 저장소: S3 호환 API(Cloudflare R2). 동기 클라이언트만 쓰므로 netty 비동기 HTTP 클라이언트는 제외한다.
+	implementation platform('software.amazon.awssdk:bom:2.57.8')
+	implementation('software.amazon.awssdk:s3') {
+		exclude group: 'software.amazon.awssdk', module: 'netty-nio-client'
+	}
+
 	implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
 	runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
 	runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'

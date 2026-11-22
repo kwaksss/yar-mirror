@@ -1,4 +1,4 @@
-import { formatCoordinateAddress, pickKakaoAddress } from './address';
+import { displayableAddress, isCoordinateAddress, pickKakaoAddress } from './address';
 
 describe('pickKakaoAddress', () => {
   it('prefers the road address over the lot address', () => {
@@ -26,10 +26,26 @@ describe('pickKakaoAddress', () => {
   });
 });
 
-describe('formatCoordinateAddress', () => {
-  it('renders a five-decimal coordinate pair as the fallback address', () => {
-    expect(formatCoordinateAddress({ latitude: 37.5445, longitude: 127.0557 })).toBe(
-      '37.54450, 127.05570',
-    );
+describe('isCoordinateAddress', () => {
+  it('recognises the coordinate fallback stored when the lookup failed', () => {
+    expect(isCoordinateAddress('37.54450, 127.05570')).toBe(true);
+    expect(isCoordinateAddress('-33.86880, 151.20930')).toBe(true);
+  });
+
+  it('does not mistake a real address for a coordinate', () => {
+    expect(isCoordinateAddress('서울 성동구 성수이로 10')).toBe(false);
+    expect(isCoordinateAddress('서울 성동구 성수동2가 1-1')).toBe(false);
+  });
+});
+
+describe('displayableAddress', () => {
+  it('passes a real address through', () => {
+    expect(displayableAddress(' 서울 성동구 성수이로 10 ')).toBe('서울 성동구 성수이로 10');
+  });
+
+  it('hides empty values and legacy coordinate fallbacks', () => {
+    expect(displayableAddress(null)).toBeNull();
+    expect(displayableAddress('')).toBeNull();
+    expect(displayableAddress('37.54450, 127.05570')).toBeNull();
   });
 });

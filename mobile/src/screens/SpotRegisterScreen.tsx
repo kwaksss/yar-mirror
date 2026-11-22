@@ -19,7 +19,6 @@ import type { RootScreenProps } from '../navigation/types';
 import { registerSpot } from '../spots/registerSpot';
 import { addOptimisticSpot, removeSpot, replaceSpot } from '../spots/spotsStore';
 import type { LatLng } from '../types/geo';
-import { formatCoordinateAddress } from '../utils/address';
 import { PinDot, PlusIcon } from '../components/ui/Icons';
 import { CONTENT_MAX_WIDTH, colors, radius, space, type } from '../theme';
 
@@ -45,9 +44,13 @@ export function SpotRegisterScreen({ navigation, route }: RootScreenProps<'SpotR
     requestAddress({ latitude, longitude });
   }, [requestAddress, latitude, longitude]);
 
-  // Registration must never wait on the map WebView, so a lookup that is still
-  // pending or that failed submits the raw coordinate instead.
-  const submittedAddress = geocode.address ?? formatCoordinateAddress(resolvedPosition);
+  // 등록은 지도 WebView 를 기다리지 않는다. 주소 조회가 아직 끝나지 않았거나 실패하면 주소 없이
+  // 등록하고(위치는 위도·경도로 저장된다), 상세 화면이 그 위치로 주소를 다시 조회한다.
+  const submittedAddress = geocode.address ?? undefined;
+  const addressLabel =
+    geocode.status === 'pending' || geocode.status === 'idle'
+      ? '주소 확인 중...'
+      : (geocode.address ?? '주소를 찾지 못했어요. 지도에 찍은 위치로 등록돼요.');
 
   const handlePickPhoto = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -130,7 +133,7 @@ export function SpotRegisterScreen({ navigation, route }: RootScreenProps<'SpotR
           <View style={styles.addressRow}>
             <PinDot />
             <Text testID="resolved-address" style={[type.label, styles.addressText]}>
-              {geocode.status === 'pending' ? '주소 확인 중...' : submittedAddress}
+              {addressLabel}
             </Text>
           </View>
           <View style={styles.locationFooter}>

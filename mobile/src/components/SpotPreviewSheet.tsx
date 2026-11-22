@@ -13,12 +13,15 @@ import {
 } from 'react-native';
 import { colors, floating, radius, space, type } from '../theme';
 import type { Spot } from '../types/spot';
+import { displayableAddress } from '../utils/address';
 import { CloseIcon } from './ui/Icons';
 
 type Props = {
   spot: Spot;
   /** "320m" 처럼 이미 포맷된 거리. 알 수 없으면 null. */
   distanceText: string | null;
+  /** 보여 줄 주소. 생략하면 저장된 주소를 쓴다(좌표 표기는 숨긴다). */
+  addressText?: string;
   /** 시트를 누르거나 위로 끌어 올렸을 때. 상세 화면으로 이동한다. */
   onOpen: () => void;
   onClose: () => void;
@@ -41,7 +44,14 @@ const CLOSE_VELOCITY = 0.6;
  * 펼친 뒤 상세 화면으로 넘어간다. 높이(레이아웃 값)는 네이티브 드라이버를 쓸 수 없지만, 웹과 앱에서
  * 똑같이 동작하고 사진이 자연스럽게 따라 커진다는 점을 우선했다.
  */
-export function SpotPreviewSheet({ spot, distanceText, onOpen, onClose, bottomInset = 0 }: Props) {
+export function SpotPreviewSheet({
+  spot,
+  distanceText,
+  addressText,
+  onOpen,
+  onClose,
+  bottomInset = 0,
+}: Props) {
   const { height: windowHeight } = useWindowDimensions();
   const peek = Math.round(windowHeight * PEEK_RATIO);
   const height = useRef(new Animated.Value(0)).current;
@@ -172,7 +182,7 @@ export function SpotPreviewSheet({ spot, distanceText, onOpen, onClose, bottomIn
             </Text>
           ) : null}
           <Text style={[type.body, styles.address]} numberOfLines={1}>
-            {spot.address ?? '주소 정보 없음'}
+            {addressText ?? displayableAddress(spot.address) ?? '주소 정보 없음'}
           </Text>
         </View>
 

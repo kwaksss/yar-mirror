@@ -9,6 +9,8 @@ import { DEFAULT_SEARCH_RADIUS_M, DEFAULT_MAP_LEVEL } from '../config/constants'
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import { useDebouncedRegion } from '../hooks/useDebouncedRegion';
 import { useInsets } from '../hooks/useInsets';
+import { useReverseGeocode } from '../hooks/useReverseGeocode';
+import { displayableAddress } from '../utils/address';
 import type { RootScreenProps } from '../navigation/types';
 import { setSpots, useSpots } from '../spots/spotsStore';
 import { colors, floating, radius, space, type } from '../theme';
@@ -115,6 +117,24 @@ export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
         )
       : null;
 
+  // 주소 없이 저장된 스팟은 시트를 열 때 지도의 카카오 SDK 로 도로명 주소를 조회한다.
+  const geocode = useReverseGeocode();
+  const { requestAddress } = geocode;
+  const storedAddress = displayableAddress(selected?.address);
+  const lookupId = selected && !storedAddress ? selected.id : null;
+  const lookupLat = selected?.latitude;
+  const lookupLng = selected?.longitude;
+  useEffect(() => {
+    if (lookupId === null || lookupLat === undefined || lookupLng === undefined) return;
+    requestAddress({ latitude: lookupLat, longitude: lookupLng });
+  }, [lookupId, lookupLat, lookupLng, requestAddress]);
+
+  let addressText: string;
+  if (storedAddress) addressText = storedAddress;
+  else if (geocode.address) addressText = geocode.address;
+  else if (geocode.status === 'pending' || geocode.status === 'idle') addressText = '주소 확인 중...';
+  else addressText = '주소 정보 없음';
+
   const notice = error
     ? error
     : loaded && spots.length === 0
@@ -130,6 +150,8 @@ export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
         onMarkerPress={handleMarkerPress}
         onMapPress={closeSheet}
         focusRequest={focusRequest}
+        geocodeRequest={geocode.request}
+        onGeocodeResult={geocode.handleResult}
       />
 
       <View style={[styles.top, { top: insets.top + space.md }]} pointerEvents="box-none">
@@ -162,6 +184,7 @@ export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
           key={`${selected.id}-${sheetKey}`}
           spot={selected}
           distanceText={distanceText}
+          addressText={addressText}
           onOpen={openDetail}
           onClose={closeSheet}
           bottomInset={insets.bottom}

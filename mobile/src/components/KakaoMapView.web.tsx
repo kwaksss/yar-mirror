@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { DEFAULT_MAP_LEVEL } from '../config/constants';
 import { getAppExtra } from '../config/env';
-import type { ReverseGeocodeRequest } from '../hooks/useReverseGeocode';
 import type { LatLng } from '../types/geo';
 import { buildKakaoMapHtml } from './kakaoMapHtml';
+import { reverseGeocodeOnWeb } from './kakaoWebGeocoder';
 import type { KakaoMapMessage, KakaoMapViewProps, MarkerPayload } from './kakaoMapTypes';
 
 export type { KakaoMapMessage, KakaoMapViewProps } from './kakaoMapTypes';
@@ -15,7 +15,6 @@ type MirrorSpotApi = {
   setCenter: (latitude: number, longitude: number) => void;
   setSelected: (latitude: number | null, longitude: number | null) => void;
   focusOn: (latitude: number, longitude: number, offsetY: number) => void;
-  reverseGeocode: (id: number, latitude: number, longitude: number) => void;
 };
 
 /** iframe 이 부모 창으로 보내는 메시지 봉투(kakaoMapHtml.ts 의 send 와 짝). */
@@ -26,8 +25,9 @@ const MESSAGE_SOURCE = 'mirrorspot-map';
  * srcDoc iframe 은 부모와 같은 origin 이라 부모가 iframe 의 `window.MirrorSpot.*` 를 직접 호출할 수 있고,
  * iframe 은 `window.parent.postMessage` 로 결과를 돌려준다.
  *
- * 주의: 이 iframe 의 origin 은 앱의 웹 주소(예: http://localhost:8081)이므로, 카카오 콘솔의
+ * 주의: 지도 SDK 는 부모 페이지 주소(예: http://localhost:8081)로 요청되므로, 카카오 콘솔의
  * [JavaScript SDK 도메인]에 그 주소가 등록되어 있어야 지도가 뜬다.
+ * 주소 조회만은 iframe 안에서 하면 `about://` 로 거부되어, 이 페이지에서 따로 한다.
  */
 export function KakaoMapView({
   center,
@@ -74,7 +74,6 @@ export function KakaoMapView({
   const readyRef = useRef(false);
   const markersRef = useRef<MarkerPayload[]>(markerPayload);
   const centerRef = useRef<LatLng>(center);
-  const geocodeRef = useRef<ReverseGeocodeRequest | null>(geocodeRequest);
   const selectedRef = useRef<LatLng | null>(selectedPosition);
 
   useEffect(() => {
@@ -111,11 +110,21 @@ export function KakaoMapView({
     getApi()?.focusOn(focusRequest.latitude, focusRequest.longitude, focusRequest.offsetY);
   }, [focusRequest, getApi]);
 
+  // 주소 조회는 iframe 이 아니라 이 페이지에서 한다(kakaoWebGeocoder.ts 주석 참고).
+  // 지도 준비를 기다릴 필요도 없다.
+  const onGeocodeResultRef = useRef(onGeocodeResult);
+  onGeocodeResultRef.current = onGeocodeResult;
   useEffect(() => {
-    geocodeRef.current = geocodeRequest;
-    if (!geocodeRequest || !readyRef.current) return;
-    getApi()?.reverseGeocode(geocodeRequest.id, geocodeRequest.latitude, geocodeRequest.longitude);
-  }, [geocodeRequest, getApi]);
+    if (!geocodeRequest || !kakaoJsKey) return;
+    const { id, latitude, longitude } = geocodeRequest;
+    void reverseGeocodeOnWeb(kakaoJsKey, latitude, longitude).then((payload) => {
+      onGeocodeResultRef.current?.({
+        id,
+        roadAddress: payload.roadAddress ?? null,
+        lotAddress: payload.lotAddress ?? null,
+      });
+    });
+  }, [geocodeRequest, kakaoJsKey]);
 
   const handleMessage = useCallback(
     (message: KakaoMapMessage) => {
@@ -129,13 +138,6 @@ export function KakaoMapView({
             selectedRef.current?.latitude ?? null,
             selectedRef.current?.longitude ?? null,
           );
-          if (geocodeRef.current) {
-            api?.reverseGeocode(
-              geocodeRef.current.id,
-              geocodeRef.current.latitude,
-              geocodeRef.current.longitude,
-            );
-          }
           break;
         }
         case 'idle':

@@ -20,6 +20,8 @@ import { registerSpot } from '../spots/registerSpot';
 import { addOptimisticSpot, removeSpot, replaceSpot } from '../spots/spotsStore';
 import type { LatLng } from '../types/geo';
 import { formatCoordinateAddress } from '../utils/address';
+import { PinDot, PlusIcon } from '../components/ui/Icons';
+import { CONTENT_MAX_WIDTH, colors, radius, space, type } from '../theme';
 
 type PickedPhoto = { uri: string; contentType: string };
 
@@ -107,124 +109,197 @@ export function SpotRegisterScreen({ navigation, route }: RootScreenProps<'SpotR
   };
 
   return (
-    <ScrollView contentContainerStyle={styles.content}>
-      <Text style={styles.label}>위치</Text>
-      <View style={styles.mapBox}>
-        <KakaoMapView
-          center={resolvedPosition}
-          level={DEFAULT_MAP_LEVEL}
-          onMapPress={setPosition}
-          geocodeRequest={geocode.request}
-          onGeocodeResult={geocode.handleResult}
-        />
+    <ScrollView
+      style={styles.screen}
+      contentContainerStyle={styles.content}
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={styles.column}>
+        <View style={styles.section}>
+          <Text style={type.heading}>위치</Text>
+          <View style={styles.mapBox}>
+            <KakaoMapView
+              center={resolvedPosition}
+              level={DEFAULT_MAP_LEVEL}
+              onMapPress={setPosition}
+              selectedPosition={resolvedPosition}
+              geocodeRequest={geocode.request}
+              onGeocodeResult={geocode.handleResult}
+            />
+          </View>
+          <View style={styles.addressRow}>
+            <PinDot />
+            <Text testID="resolved-address" style={[type.label, styles.addressText]}>
+              {geocode.status === 'pending' ? '주소 확인 중...' : submittedAddress}
+            </Text>
+          </View>
+          <View style={styles.locationFooter}>
+            <Text style={[type.caption, styles.flex]}>
+              지도를 눌러 거울이 있는 곳을 정확히 찍어 주세요.
+            </Text>
+            <Pressable
+              testID="use-current-location"
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.chip, pressed && styles.pressed]}
+              onPress={() => setPosition(center)}
+            >
+              <Text style={styles.chipText}>현재 위치 사용</Text>
+            </Pressable>
+          </View>
+        </View>
+
+        <View style={styles.section}>
+          <Text style={type.heading}>사진</Text>
+          {photo ? (
+            <View>
+              <Image testID="picked-photo" source={{ uri: photo.uri }} style={styles.preview} />
+              <Pressable
+                testID="pick-photo-button"
+                accessibilityRole="button"
+                style={({ pressed }) => [styles.changePhoto, pressed && styles.pressed]}
+                onPress={() => void handlePickPhoto()}
+              >
+                <Text style={styles.changePhotoText}>사진 변경</Text>
+              </Pressable>
+            </View>
+          ) : (
+            <Pressable
+              testID="pick-photo-button"
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.photoTile, pressed && styles.pressed]}
+              onPress={() => void handlePickPhoto()}
+            >
+              <View style={styles.photoTileIcon}>
+                <PlusIcon size={16} color={colors.accent} />
+              </View>
+              <Text style={type.label}>사진 선택</Text>
+              <Text style={type.caption}>거울과 주변이 함께 보이는 사진 1장</Text>
+            </Pressable>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={type.heading}>스팟 이름</Text>
+          <TextInput
+            testID="spot-name-input"
+            style={styles.input}
+            value={name}
+            onChangeText={setName}
+            placeholder="예: 성수동 카페 전신거울"
+            placeholderTextColor={colors.muted}
+          />
+        </View>
+
+        <View style={styles.section}>
+          <Text style={type.heading}>
+            설명 <Text style={type.caption}>선택</Text>
+          </Text>
+          <TextInput
+            testID="spot-description-input"
+            style={[styles.input, styles.multiline]}
+            value={description}
+            onChangeText={setDescription}
+            placeholder="조명, 찍기 좋은 시간, 촬영 팁"
+            placeholderTextColor={colors.muted}
+            multiline
+          />
+        </View>
+
+        {error ? (
+          <Text testID="register-error" style={styles.error}>
+            {error}
+          </Text>
+        ) : null}
+
+        <Pressable
+          testID="submit-spot-button"
+          accessibilityRole="button"
+          disabled={!canSubmit}
+          style={({ pressed }) => [
+            styles.submitButton,
+            !canSubmit && styles.submitButtonDisabled,
+            pressed && styles.pressed,
+          ]}
+          onPress={() => void handleSubmit()}
+        >
+          {submitting ? (
+            <ActivityIndicator color={colors.paper} />
+          ) : (
+            <Text style={styles.submitButtonText}>등록하기</Text>
+          )}
+        </Pressable>
       </View>
-      <Text style={styles.hint}>
-        지도를 탭해 위치를 지정하거나 현재 위치를 사용하세요.{'\n'}
-        선택 위치: {resolvedPosition.latitude.toFixed(5)},{' '}
-        {resolvedPosition.longitude.toFixed(5)}
-      </Text>
-      <Text testID="resolved-address" style={styles.hint}>
-        주소: {geocode.status === 'pending' ? '확인 중...' : submittedAddress}
-      </Text>
-      <Pressable
-        testID="use-current-location"
-        accessibilityRole="button"
-        style={styles.secondaryButton}
-        onPress={() => setPosition(center)}
-      >
-        <Text style={styles.secondaryButtonText}>현재 위치 사용</Text>
-      </Pressable>
-
-      <Text style={styles.label}>사진 (1장 필수)</Text>
-      <Pressable
-        testID="pick-photo-button"
-        accessibilityRole="button"
-        style={styles.secondaryButton}
-        onPress={() => void handlePickPhoto()}
-      >
-        <Text style={styles.secondaryButtonText}>
-          {photo ? '사진 변경' : '사진 선택'}
-        </Text>
-      </Pressable>
-      {photo ? (
-        <Image testID="picked-photo" source={{ uri: photo.uri }} style={styles.preview} />
-      ) : null}
-
-      <Text style={styles.label}>스팟 이름 (필수)</Text>
-      <TextInput
-        testID="spot-name-input"
-        style={styles.input}
-        value={name}
-        onChangeText={setName}
-        placeholder="예: 성수동 카페 전신거울"
-      />
-
-      <Text style={styles.label}>설명 (선택)</Text>
-      <TextInput
-        testID="spot-description-input"
-        style={[styles.input, styles.multiline]}
-        value={description}
-        onChangeText={setDescription}
-        placeholder="조명, 촬영 팁 등"
-        multiline
-      />
-
-      {error ? (
-        <Text testID="register-error" style={styles.error}>
-          {error}
-        </Text>
-      ) : null}
-
-      <Pressable
-        testID="submit-spot-button"
-        accessibilityRole="button"
-        disabled={!canSubmit}
-        style={[styles.submitButton, !canSubmit && styles.submitButtonDisabled]}
-        onPress={() => void handleSubmit()}
-      >
-        {submitting ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.submitButtonText}>등록하기</Text>
-        )}
-      </Pressable>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
-  content: { padding: 16, gap: 10, paddingBottom: 40 },
-  label: { fontSize: 15, fontWeight: '700', marginTop: 8 },
-  hint: { fontSize: 13, color: '#666' },
-  mapBox: { height: 220, borderRadius: 10, overflow: 'hidden' },
-  secondaryButton: {
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: '#ccc',
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+  screen: { flex: 1, backgroundColor: colors.paper },
+  content: { paddingHorizontal: space.xl, paddingTop: space.md, paddingBottom: 48 },
+  column: { width: '100%', maxWidth: CONTENT_MAX_WIDTH, alignSelf: 'center', gap: space.xxl },
+  section: { gap: space.md },
+  flex: { flex: 1 },
+  mapBox: { height: 240, borderRadius: radius.lg, overflow: 'hidden', backgroundColor: colors.surface },
+  addressRow: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  addressText: { flex: 1 },
+  locationFooter: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  chip: {
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
   },
-  secondaryButtonText: { fontSize: 14, fontWeight: '600' },
-  // 상세 화면과 같은 3:4(세로형 4:3) 비율로 미리 보여준다.
-  preview: { width: '100%', aspectRatio: 3 / 4, borderRadius: 10, backgroundColor: '#eee' },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 15,
-  },
-  multiline: { height: 90, textAlignVertical: 'top' },
-  error: { color: '#c0392b', fontSize: 14 },
-  submitButton: {
-    marginTop: 12,
-    backgroundColor: '#111',
-    borderRadius: 10,
-    paddingVertical: 15,
+  chipText: { ...type.label, fontSize: 14, color: colors.accent },
+  photoTile: {
+    height: 168,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.line,
+    backgroundColor: colors.surface,
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: space.xs,
   },
-  submitButtonDisabled: { backgroundColor: '#bbb' },
-  submitButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  photoTileIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: colors.paper,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: space.xs,
+  },
+  // 상세 화면과 같은 3:4(세로형 4:3) 비율로 미리 보여준다.
+  preview: { width: '100%', aspectRatio: 3 / 4, borderRadius: radius.lg, backgroundColor: colors.surface },
+  changePhoto: {
+    position: 'absolute',
+    right: space.md,
+    bottom: space.md,
+    backgroundColor: colors.scrim,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
+  },
+  changePhotoText: { ...type.label, fontSize: 14, color: colors.paper },
+  input: {
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    paddingHorizontal: space.lg,
+    paddingVertical: 14,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  multiline: { height: 110, textAlignVertical: 'top' },
+  error: { ...type.body, color: colors.danger },
+  submitButton: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.md,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  submitButtonDisabled: { backgroundColor: colors.line },
+  submitButtonText: { ...type.label, fontSize: 16, color: colors.paper },
+  pressed: { opacity: 0.75 },
 });

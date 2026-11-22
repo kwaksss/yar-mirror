@@ -1,17 +1,32 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { fetchNearbySpots } from '../api/spots';
 import { KakaoMapView } from '../components/KakaoMapView';
+import type { MapFocusRequest } from '../components/kakaoMapTypes';
+import { PEEK_RATIO, SpotPreviewSheet } from '../components/SpotPreviewSheet';
+import { PlusIcon } from '../components/ui/Icons';
 import { DEFAULT_SEARCH_RADIUS_M, DEFAULT_MAP_LEVEL } from '../config/constants';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import { useDebouncedRegion } from '../hooks/useDebouncedRegion';
+import { useInsets } from '../hooks/useInsets';
 import type { RootScreenProps } from '../navigation/types';
 import { setSpots, useSpots } from '../spots/spotsStore';
+import { colors, floating, radius, space, type } from '../theme';
+import type { Spot } from '../types/spot';
+import { formatDistance, haversineMeters } from '../utils/distance';
+
+/** 화면 위쪽에 떠 있는 제목 바가 차지하는 높이(여백 12 + 바 52). */
+const TITLE_BAR_OFFSET = 64;
 
 export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
   const { center, usingFallback, permission, requestPermission } = useCurrentLocation();
   const spots = useSpots();
+  const insets = useInsets();
   const [error, setError] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const [selected, setSelected] = useState<Spot | null>(null);
+  // 상세 화면에서 돌아오면 시트를 다시 절반 높이로 올려 놓는다(끌어 올린 채로 남지 않게).
+  const [sheetKey, setSheetKey] = useState(0);
 
   const { region, settledRegion, onRegionChange } = useDebouncedRegion({
     ...center,
@@ -45,7 +60,9 @@ export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
         setSpots(result);
         setError(null);
       } catch {
-        if (!cancelled) setError('주변 스팟을 불러오지 못했습니다.');
+        if (!cancelled) setError('주변 스팟을 불러오지 못했어요. 지도를 움직이면 다시 시도합니다.');
+      } finally {
+        if (!cancelled) setLoaded(true);
       }
     })();
 
@@ -54,10 +71,55 @@ export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
     };
   }, [settledRegion]);
 
-  const handleMarkerPress = useCallback(
-    (spotId: number) => navigation.navigate('SpotDetail', { spotId }),
+  useEffect(
+    () => navigation.addListener('focus', () => setSheetKey((key) => key + 1)),
     [navigation],
   );
+
+  const { height: windowHeight } = useWindowDimensions();
+  const [focusRequest, setFocusRequest] = useState<MapFocusRequest | null>(null);
+  const focusId = useRef(0);
+
+  const handleMarkerPress = useCallback(
+    (spotId: number) => {
+      const spot = spots.find((item) => item.id === spotId);
+      if (!spot) return;
+      setSelected(spot);
+
+      // 위쪽 제목 바와 아래쪽 시트 사이, 실제로 보이는 지도 영역의 가운데로 마커를 옮긴다.
+      const visibleTop = insets.top + TITLE_BAR_OFFSET;
+      const visibleBottom = windowHeight * (1 - PEEK_RATIO);
+      const offsetY = Math.max(0, windowHeight / 2 - (visibleTop + visibleBottom) / 2);
+      focusId.current += 1;
+      setFocusRequest({
+        id: focusId.current,
+        latitude: spot.latitude,
+        longitude: spot.longitude,
+        offsetY: Math.round(offsetY),
+      });
+    },
+    [spots, insets.top, windowHeight],
+  );
+
+  const closeSheet = useCallback(() => setSelected(null), []);
+
+  const openDetail = useCallback(() => {
+    if (selected) navigation.navigate('SpotDetail', { spotId: selected.id });
+  }, [navigation, selected]);
+
+  // 위치를 못 잡아 기본 위치를 쓰는 동안에는 거리가 의미 없으므로 숨긴다.
+  const distanceText =
+    selected && !usingFallback
+      ? formatDistance(
+          haversineMeters(center, { latitude: selected.latitude, longitude: selected.longitude }),
+        )
+      : null;
+
+  const notice = error
+    ? error
+    : loaded && spots.length === 0
+      ? '이 주변에는 아직 스팟이 없어요. 처음으로 등록해 보세요.'
+      : null;
 
   return (
     <View style={styles.container}>
@@ -66,91 +128,128 @@ export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
         markers={spots}
         onRegionChange={onRegionChange}
         onMarkerPress={handleMarkerPress}
+        onMapPress={closeSheet}
+        focusRequest={focusRequest}
       />
 
-      {permission === 'denied' ? (
-        <View testID="location-permission-banner" style={styles.banner}>
-          <Text style={styles.bannerText}>
-            위치 권한이 없어 기본 위치(서울시청)를 표시하고 있습니다.
+      <View style={[styles.top, { top: insets.top + space.md }]} pointerEvents="box-none">
+        <View style={[styles.titleBar, floating]}>
+          <Text style={type.heading}>거울샷 스팟</Text>
+          <Text testID="nearby-count" style={styles.count}>
+            주변 {spots.length}곳
           </Text>
+        </View>
+
+        {permission === 'denied' ? (
+          <View testID="location-permission-banner" style={[styles.banner, floating]}>
+            <Text style={[type.body, styles.bannerText]}>
+              위치 권한이 없어 서울시청 주변을 보여 주고 있어요.
+            </Text>
+            <Pressable
+              testID="request-location-permission"
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.bannerButton, pressed && styles.pressed]}
+              onPress={() => void requestPermission()}
+            >
+              <Text style={styles.bannerButtonText}>위치 권한 허용</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </View>
+
+      {selected ? (
+        <SpotPreviewSheet
+          key={`${selected.id}-${sheetKey}`}
+          spot={selected}
+          distanceText={distanceText}
+          onOpen={openDetail}
+          onClose={closeSheet}
+          bottomInset={insets.bottom}
+        />
+      ) : (
+        <View
+          style={[styles.bottom, { bottom: insets.bottom + space.xl }]}
+          pointerEvents="box-none"
+        >
+          {notice ? (
+            <View style={styles.notice}>
+              <Text style={styles.noticeText}>{notice}</Text>
+            </View>
+          ) : null}
           <Pressable
-            testID="request-location-permission"
+            testID="add-spot-button"
             accessibilityRole="button"
-            style={styles.bannerButton}
-            onPress={() => void requestPermission()}
+            style={({ pressed }) => [styles.fab, floating, pressed && styles.pressed]}
+            onPress={() =>
+              navigation.navigate('SpotRegister', {
+                initialCenter: usingFallback ? settledRegion : center,
+              })
+            }
           >
-            <Text style={styles.bannerButtonText}>권한 다시 요청</Text>
+            <PlusIcon size={14} />
+            <Text style={styles.fabText}>스팟 추가</Text>
           </Pressable>
         </View>
-      ) : null}
-
-      {error ? (
-        <View style={styles.errorToast}>
-          <Text style={styles.errorText}>{error}</Text>
-        </View>
-      ) : null}
-
-      {spots.length === 0 && !error ? (
-        <View style={styles.errorToast}>
-          <Text style={styles.errorText}>이 주변에는 아직 등록된 스팟이 없습니다.</Text>
-        </View>
-      ) : null}
-
-      <Pressable
-        testID="add-spot-button"
-        accessibilityRole="button"
-        style={styles.fab}
-        onPress={() =>
-          navigation.navigate('SpotRegister', {
-            initialCenter: usingFallback ? settledRegion : center,
-          })
-        }
-      >
-        <Text style={styles.fabText}>+ 스팟 추가</Text>
-      </Pressable>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1 },
-  banner: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    right: 12,
-    backgroundColor: 'rgba(0,0,0,0.78)',
-    borderRadius: 10,
-    padding: 12,
-    gap: 8,
+  container: { flex: 1, backgroundColor: colors.surface },
+  top: { position: 'absolute', left: space.lg, right: space.lg, gap: space.sm },
+  titleBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: colors.paper,
+    borderRadius: radius.pill,
+    paddingLeft: space.xl,
+    paddingRight: space.sm,
+    height: 52,
   },
-  bannerText: { color: '#fff', fontSize: 13 },
+  count: {
+    ...type.caption,
+    color: colors.accent,
+    fontWeight: '700',
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.md,
+    paddingVertical: 7,
+    overflow: 'hidden',
+  },
+  banner: {
+    backgroundColor: colors.paper,
+    borderRadius: radius.lg,
+    padding: space.lg,
+    gap: space.md,
+  },
+  bannerText: { color: colors.ink },
   bannerButton: {
     alignSelf: 'flex-start',
-    backgroundColor: '#fff',
-    borderRadius: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    backgroundColor: colors.accentSoft,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.sm,
   },
-  bannerButtonText: { fontSize: 13, fontWeight: '600' },
-  errorToast: {
-    position: 'absolute',
-    bottom: 92,
-    left: 12,
-    right: 12,
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    borderRadius: 8,
-    padding: 10,
+  bannerButtonText: { ...type.label, fontSize: 14, color: colors.accent },
+  bottom: { position: 'absolute', left: space.lg, right: space.lg, alignItems: 'center', gap: space.md },
+  notice: {
+    backgroundColor: colors.scrim,
+    borderRadius: radius.md,
+    paddingHorizontal: space.lg,
+    paddingVertical: space.md,
   },
-  errorText: { color: '#fff', fontSize: 13, textAlign: 'center' },
+  noticeText: { ...type.caption, color: colors.paper, textAlign: 'center' },
   fab: {
-    position: 'absolute',
-    bottom: 28,
-    alignSelf: 'center',
-    backgroundColor: '#111',
-    borderRadius: 24,
-    paddingHorizontal: 22,
-    paddingVertical: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    backgroundColor: colors.accent,
+    borderRadius: radius.pill,
+    paddingHorizontal: space.xxl,
+    height: 52,
   },
-  fabText: { color: '#fff', fontSize: 15, fontWeight: '600' },
+  fabText: { ...type.label, color: colors.paper },
+  pressed: { opacity: 0.75 },
 });

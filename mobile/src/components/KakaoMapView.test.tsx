@@ -232,4 +232,58 @@ describe('KakaoMapView marker injection', () => {
 
     expect(onRegionChange).not.toHaveBeenCalled();
   });
+
+  it('replays the selected position on ready and moves it when the prop changes', async () => {
+    const center = { latitude: 37.5665, longitude: 126.978 };
+    const { rerender } = await render(
+      <KakaoMapView center={center} selectedPosition={{ latitude: 37.5, longitude: 127.01 }} />,
+    );
+
+    expect(injectedScripts().some((s) => s.includes('setSelected'))).toBe(false);
+
+    await post({ type: 'ready' });
+    expect(injectedScripts().find((s) => s.includes('setSelected'))).toContain(
+      'setSelected(37.5, 127.01)',
+    );
+
+    mockInjectJavaScript.mockClear();
+    await rerender(
+      <KakaoMapView center={center} selectedPosition={{ latitude: 37.6, longitude: 127.02 }} />,
+    );
+    expect(injectedScripts().find((s) => s.includes('setSelected'))).toContain(
+      'setSelected(37.6, 127.02)',
+    );
+  });
+
+  it('clears the selected marker when no position is given', async () => {
+    await render(<KakaoMapView center={{ latitude: 37.5665, longitude: 126.978 }} />);
+    await post({ type: 'ready' });
+    expect(injectedScripts().find((s) => s.includes('setSelected'))).toContain(
+      'setSelected(null, null)',
+    );
+  });
+
+  it('pans to each focus request once the map is ready, even for the same spot twice', async () => {
+    const center = { latitude: 37.5665, longitude: 126.978 };
+    const { rerender } = await render(<KakaoMapView center={center} />);
+    await post({ type: 'ready' });
+    mockInjectJavaScript.mockClear();
+
+    await rerender(
+      <KakaoMapView
+        center={center}
+        focusRequest={{ id: 1, latitude: 37.5445, longitude: 127.0557, offsetY: 160 }}
+      />,
+    );
+    await rerender(
+      <KakaoMapView
+        center={center}
+        focusRequest={{ id: 2, latitude: 37.5445, longitude: 127.0557, offsetY: 160 }}
+      />,
+    );
+
+    const focusScripts = injectedScripts().filter((s) => s.includes('focusOn'));
+    expect(focusScripts).toHaveLength(2);
+    expect(focusScripts[0]).toContain('focusOn(37.5445, 127.0557, 160)');
+  });
 });

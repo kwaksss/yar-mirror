@@ -12,6 +12,7 @@ import {
   prepareAuthorization,
   type SocialProvider,
 } from '../auth/oauth';
+import { colors, radius, space, type } from '../theme';
 
 export function LoginScreen() {
   const { signIn } = useAuth();
@@ -39,8 +40,13 @@ export function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>거울샷 스팟</Text>
-      <Text style={styles.subtitle}>주변의 거울샷 명당을 찾아보세요</Text>
+      <View style={styles.brand}>
+        <View style={styles.mirror}>
+          <View style={styles.mirrorGlint} />
+        </View>
+        <Text style={styles.title}>거울샷 스팟</Text>
+        <Text style={styles.subtitle}>근처에서 전신거울 샷 찍기 좋은 곳을 찾아보세요</Text>
+      </View>
 
       <Pressable
         testID="kakao-login-button"
@@ -66,11 +72,47 @@ export function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', paddingHorizontal: 28, gap: 12 },
-  title: { fontSize: 32, fontWeight: '700', textAlign: 'center' },
-  subtitle: { fontSize: 15, color: '#666', textAlign: 'center', marginBottom: 28 },
-  button: { borderRadius: 10, paddingVertical: 15, alignItems: 'center' },
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: space.xxl,
+    gap: space.md,
+    backgroundColor: colors.paper,
+  },
+  brand: { alignItems: 'center', gap: space.sm, marginBottom: 48 },
+  // 세로로 긴 전신거울을 단순한 도형으로 표현한 로고.
+  mirror: {
+    width: 56,
+    height: 84,
+    borderRadius: 28,
+    borderWidth: 3,
+    borderColor: colors.ink,
+    backgroundColor: colors.accentSoft,
+    marginBottom: space.lg,
+    overflow: 'hidden',
+  },
+  mirrorGlint: {
+    position: 'absolute',
+    top: 14,
+    left: 12,
+    width: 8,
+    height: 30,
+    borderRadius: 4,
+    backgroundColor: colors.paper,
+    transform: [{ rotate: '20deg' }],
+  },
+  title: { ...type.display, fontSize: 30, lineHeight: 36, textAlign: 'center' },
+  subtitle: { ...type.body, textAlign: 'center' },
+  button: {
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    borderRadius: radius.md,
+    height: 54,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   kakaoButton: { backgroundColor: '#FEE500' },
-  kakaoLabel: { color: '#191600', fontSize: 16, fontWeight: '600' },
-  error: { color: '#c0392b', textAlign: 'center', marginTop: 8 },
+  kakaoLabel: { color: '#191600', fontSize: 16, fontWeight: '700' },
+  error: { ...type.body, color: colors.danger, textAlign: 'center', marginTop: space.sm },
 });

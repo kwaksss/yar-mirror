@@ -121,16 +121,16 @@ describe('SpotRegisterScreen address auto-fill', () => {
     );
   });
 
-  it('registers with the coordinate fallback when the lookup finds no address', async () => {
+  it('registers without an address, never a coordinate, when the lookup finds none', async () => {
     await renderScreen();
 
     await replyWithAddress({ type: 'geocode', id: 1, roadAddress: null, lotAddress: null });
+    expect(screen.getByTestId('resolved-address')).toHaveTextContent(/주소를 찾지 못했어요/);
+    expect(screen.getByTestId('resolved-address')).not.toHaveTextContent(/37\.5/);
     await fillFormAndSubmit();
 
     await waitFor(() =>
-      expect(mockCreateSpot).toHaveBeenCalledWith(
-        expect.objectContaining({ address: '37.54450, 127.05570' }),
-      ),
+      expect(mockCreateSpot).toHaveBeenCalledWith(expect.objectContaining({ address: undefined })),
     );
     expect(navigation.navigate).toHaveBeenCalledWith('Map');
   });
@@ -143,9 +143,7 @@ describe('SpotRegisterScreen address auto-fill', () => {
     await fillFormAndSubmit();
 
     await waitFor(() =>
-      expect(mockCreateSpot).toHaveBeenCalledWith(
-        expect.objectContaining({ address: '37.54450, 127.05570' }),
-      ),
+      expect(mockCreateSpot).toHaveBeenCalledWith(expect.objectContaining({ address: undefined })),
     );
     expect(navigation.navigate).toHaveBeenCalledWith('Map');
   });

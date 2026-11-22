@@ -118,14 +118,14 @@ describe('registerSpot', () => {
     );
   });
 
-  it('still registers when reverse geocoding produced only a coordinate fallback', async () => {
+  it('still registers when reverse geocoding found no address', async () => {
     const { deps } = makeDeps();
 
-    const result = await registerSpot({ ...input, address: '37.54450, 127.05570' }, deps);
+    const result = await registerSpot({ ...input, address: undefined }, deps);
 
     expect(result).toEqual(confirmedDetail);
     expect(deps.createSpot).toHaveBeenCalledWith(
-      expect.objectContaining({ address: '37.54450, 127.05570' }),
+      expect.objectContaining({ address: undefined }),
     );
   });
 

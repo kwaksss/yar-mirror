@@ -58,6 +58,7 @@ export function buildKakaoMapHtml({ jsKey, center, level }: KakaoMapHtmlOptions)
         });
 
         var markers = [];
+        var selectedMarker = null;
         var geocoder = null;
 
         var emitIdle = function () {
@@ -95,6 +96,32 @@ export function buildKakaoMapHtml({ jsKey, center, level }: KakaoMapHtmlOptions)
               });
               return marker;
             });
+          },
+          // 스팟 등록 화면에서 사용자가 고른 위치를 표시하는 단일 마커. null 이면 지운다.
+          setSelected: function (lat, lng) {
+            if (lat === null || lng === null) {
+              if (selectedMarker) selectedMarker.setMap(null);
+              selectedMarker = null;
+              return;
+            }
+            var position = new kakao.maps.LatLng(lat, lng);
+            if (!selectedMarker) {
+              selectedMarker = new kakao.maps.Marker({ map: map, position: position, zIndex: 10 });
+            } else {
+              selectedMarker.setPosition(position);
+              selectedMarker.setMap(map);
+            }
+          },
+          // 좌표를 화면 가운데보다 offsetY(px)만큼 위에 오도록 부드럽게 옮긴다.
+          // 아래쪽을 가리는 미리보기 시트 위, 보이는 영역의 가운데에 마커를 두기 위해서다.
+          focusOn: function (lat, lng, offsetY) {
+            var target = new kakao.maps.LatLng(lat, lng);
+            var projection = map.getProjection();
+            var point = projection.containerPointFromCoords(target);
+            var nextCenter = projection.coordsFromContainerPoint(
+              new kakao.maps.Point(point.x, point.y + (offsetY || 0))
+            );
+            map.panTo(nextCenter);
           },
           setCenter: function (lat, lng) {
             map.setCenter(new kakao.maps.LatLng(lat, lng));

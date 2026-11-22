@@ -36,4 +36,16 @@ describe('buildKakaoMapHtml', () => {
     expect(html).toContain("type: 'geocode'");
     expect(html).toContain('roadAddress: null, lotAddress: null');
   });
+
+  it('exposes a single selected-position marker that can be moved or cleared', () => {
+    expect(html).toContain('setSelected: function (lat, lng)');
+    expect(html).toContain('selectedMarker.setPosition(position)');
+    expect(html).toContain('selectedMarker.setMap(null)');
+  });
+
+  it('pans to a coordinate shifted above the centre so the preview sheet does not hide it', () => {
+    expect(html).toContain('focusOn: function (lat, lng, offsetY)');
+    expect(html).toContain('point.y + (offsetY || 0)');
+    expect(html).toContain('map.panTo(nextCenter)');
+  });
 });

@@ -13,6 +13,8 @@ export type { KakaoMapMessage, KakaoMapViewProps } from './kakaoMapTypes';
 type MirrorSpotApi = {
   setMarkers: (list: MarkerPayload[]) => void;
   setCenter: (latitude: number, longitude: number) => void;
+  setSelected: (latitude: number | null, longitude: number | null) => void;
+  focusOn: (latitude: number, longitude: number, offsetY: number) => void;
   reverseGeocode: (id: number, latitude: number, longitude: number) => void;
 };
 
@@ -34,6 +36,8 @@ export function KakaoMapView({
   onRegionChange,
   onMarkerPress,
   onMapPress,
+  selectedPosition = null,
+  focusRequest = null,
   geocodeRequest = null,
   onGeocodeResult,
 }: KakaoMapViewProps) {
@@ -71,10 +75,23 @@ export function KakaoMapView({
   const markersRef = useRef<MarkerPayload[]>(markerPayload);
   const centerRef = useRef<LatLng>(center);
   const geocodeRef = useRef<ReverseGeocodeRequest | null>(geocodeRequest);
+  const selectedRef = useRef<LatLng | null>(selectedPosition);
 
   useEffect(() => {
     readyRef.current = false;
   }, [html]);
+
+  const selectedLat = selectedPosition?.latitude;
+  const selectedLng = selectedPosition?.longitude;
+  useEffect(() => {
+    const next =
+      selectedLat === undefined || selectedLng === undefined
+        ? null
+        : { latitude: selectedLat, longitude: selectedLng };
+    selectedRef.current = next;
+    if (!readyRef.current) return;
+    getApi()?.setSelected(next?.latitude ?? null, next?.longitude ?? null);
+  }, [selectedLat, selectedLng, getApi]);
 
   useEffect(() => {
     centerRef.current = center;
@@ -87,6 +104,12 @@ export function KakaoMapView({
     if (!readyRef.current) return;
     getApi()?.setMarkers(markerPayload);
   }, [markerPayload, getApi]);
+
+  // 마커를 누를 때 생기는 요청이라 지도가 이미 준비된 뒤다. 준비 전 요청은 버린다.
+  useEffect(() => {
+    if (!focusRequest || !readyRef.current) return;
+    getApi()?.focusOn(focusRequest.latitude, focusRequest.longitude, focusRequest.offsetY);
+  }, [focusRequest, getApi]);
 
   useEffect(() => {
     geocodeRef.current = geocodeRequest;
@@ -102,6 +125,10 @@ export function KakaoMapView({
           const api = getApi();
           api?.setCenter(centerRef.current.latitude, centerRef.current.longitude);
           api?.setMarkers(markersRef.current);
+          api?.setSelected(
+            selectedRef.current?.latitude ?? null,
+            selectedRef.current?.longitude ?? null,
+          );
           if (geocodeRef.current) {
             api?.reverseGeocode(
               geocodeRef.current.id,

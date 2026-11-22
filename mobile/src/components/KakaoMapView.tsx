@@ -6,7 +6,12 @@ import { getAppExtra } from '../config/env';
 import type { ReverseGeocodeRequest } from '../hooks/useReverseGeocode';
 import type { LatLng } from '../types/geo';
 import { buildKakaoMapHtml } from './kakaoMapHtml';
-import type { KakaoMapMessage, KakaoMapViewProps, MarkerPayload } from './kakaoMapTypes';
+import type {
+  KakaoMapMessage,
+  KakaoMapViewProps,
+  MapFocusRequest,
+  MarkerPayload,
+} from './kakaoMapTypes';
 
 // 웹 빌드는 KakaoMapView.web.tsx 를 쓰므로, 타입은 두 구현이 공유하는 파일에서 가져와 다시 내보낸다.
 export type { KakaoMapMessage, KakaoMapViewProps } from './kakaoMapTypes';
@@ -16,6 +21,14 @@ const setMarkersScript = (payload: MarkerPayload[]) =>
 
 const setCenterScript = (center: LatLng) =>
   `window.MirrorSpot && window.MirrorSpot.setCenter(${center.latitude}, ${center.longitude}); true;`;
+
+const setSelectedScript = (position: LatLng | null) =>
+  position
+    ? `window.MirrorSpot && window.MirrorSpot.setSelected(${position.latitude}, ${position.longitude}); true;`
+    : `window.MirrorSpot && window.MirrorSpot.setSelected(null, null); true;`;
+
+const focusScript = (request: MapFocusRequest) =>
+  `window.MirrorSpot && window.MirrorSpot.focusOn(${request.latitude}, ${request.longitude}, ${request.offsetY}); true;`;
 
 const reverseGeocodeScript = (request: ReverseGeocodeRequest) =>
   `window.MirrorSpot && window.MirrorSpot.reverseGeocode(${request.id}, ${request.latitude}, ${request.longitude}); true;`;
@@ -27,6 +40,8 @@ export function KakaoMapView({
   onRegionChange,
   onMarkerPress,
   onMapPress,
+  selectedPosition = null,
+  focusRequest = null,
   geocodeRequest = null,
   onGeocodeResult,
 }: KakaoMapViewProps) {
@@ -59,10 +74,23 @@ export function KakaoMapView({
   const markersRef = useRef<MarkerPayload[]>(markerPayload);
   const centerRef = useRef<LatLng>(center);
   const geocodeRef = useRef<ReverseGeocodeRequest | null>(geocodeRequest);
+  const selectedRef = useRef<LatLng | null>(selectedPosition);
 
   useEffect(() => {
     readyRef.current = false;
   }, [html]);
+
+  const selectedLat = selectedPosition?.latitude;
+  const selectedLng = selectedPosition?.longitude;
+  useEffect(() => {
+    const next =
+      selectedLat === undefined || selectedLng === undefined
+        ? null
+        : { latitude: selectedLat, longitude: selectedLng };
+    selectedRef.current = next;
+    if (!readyRef.current) return;
+    webViewRef.current?.injectJavaScript(setSelectedScript(next));
+  }, [selectedLat, selectedLng]);
 
   useEffect(() => {
     centerRef.current = center;
@@ -75,6 +103,12 @@ export function KakaoMapView({
     if (!readyRef.current) return;
     webViewRef.current?.injectJavaScript(setMarkersScript(markerPayload));
   }, [markerPayload]);
+
+  // 마커를 누를 때 생기는 요청이라 지도가 이미 준비된 뒤다. 준비 전 요청은 버린다.
+  useEffect(() => {
+    if (!focusRequest || !readyRef.current) return;
+    webViewRef.current?.injectJavaScript(focusScript(focusRequest));
+  }, [focusRequest]);
 
   useEffect(() => {
     geocodeRef.current = geocodeRequest;
@@ -96,6 +130,7 @@ export function KakaoMapView({
           readyRef.current = true;
           webViewRef.current?.injectJavaScript(setCenterScript(centerRef.current));
           webViewRef.current?.injectJavaScript(setMarkersScript(markersRef.current));
+          webViewRef.current?.injectJavaScript(setSelectedScript(selectedRef.current));
           if (geocodeRef.current) {
             webViewRef.current?.injectJavaScript(reverseGeocodeScript(geocodeRef.current));
           }

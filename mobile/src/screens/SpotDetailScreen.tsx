@@ -1,14 +1,20 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { fetchSpotDetail } from '../api/spots';
+import { KakaoMapView } from '../components/KakaoMapView';
 import { PinDot } from '../components/ui/Icons';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import { useInsets } from '../hooks/useInsets';
+import { useReverseGeocode } from '../hooks/useReverseGeocode';
+import { displayableAddress } from '../utils/address';
 import { FloatingBackButton } from '../navigation/HeaderBackButton';
 import type { RootScreenProps } from '../navigation/types';
 import { CONTENT_MAX_WIDTH, colors, radius, space, type } from '../theme';
 import type { SpotDetail } from '../types/spot';
 import { formatDistance, haversineMeters } from '../utils/distance';
+
+/** 상세 화면의 작은 위치 지도는 골목 단위까지 보이도록 기본 지도보다 가깝게 본다. */
+const DETAIL_MAP_LEVEL = 3;
 
 function formatRegisteredDate(iso: string | null): string | null {
   if (!iso) return null;
@@ -44,6 +50,29 @@ export function SpotDetailScreen({ navigation, route }: RootScreenProps<'SpotDet
     };
   }, [spotId, center.latitude, center.longitude]);
 
+  // 주소 없이 저장된 스팟(등록 때 조회 실패, 예전 버전이 저장한 좌표 표기 포함)은 아래 위치 지도의
+  // 카카오 SDK 로 스팟 좌표의 도로명 주소를 다시 조회해 보여 준다(저장된 값은 바꾸지 않는다).
+  // 좌표 자체는 화면에 보여 주지 않는다.
+  const geocode = useReverseGeocode();
+  const { requestAddress } = geocode;
+  const storedAddress = displayableAddress(spot?.address);
+  const needsLookup = spot !== null && storedAddress === null;
+  const lookupLat = spot?.latitude;
+  const lookupLng = spot?.longitude;
+
+  useEffect(() => {
+    if (!needsLookup || lookupLat === undefined || lookupLng === undefined) return;
+    requestAddress({ latitude: lookupLat, longitude: lookupLng });
+  }, [needsLookup, lookupLat, lookupLng, requestAddress]);
+
+  const spotPosition = useMemo(
+    () =>
+      lookupLat === undefined || lookupLng === undefined
+        ? null
+        : { latitude: lookupLat, longitude: lookupLng },
+    [lookupLat, lookupLng],
+  );
+
   const backButton = (
     <FloatingBackButton
       navigation={navigation}
@@ -51,7 +80,7 @@ export function SpotDetailScreen({ navigation, route }: RootScreenProps<'SpotDet
     />
   );
 
-  if (error || !spot) {
+  if (error || !spot || !spotPosition) {
     return (
       <View style={styles.centered}>
         {error ? (
@@ -70,6 +99,17 @@ export function SpotDetailScreen({ navigation, route }: RootScreenProps<'SpotDet
     spot.distanceMeters ??
     haversineMeters(center, { latitude: spot.latitude, longitude: spot.longitude });
   const registered = formatRegisteredDate(spot.createdAt);
+
+  let shownAddress: string;
+  if (storedAddress) {
+    shownAddress = storedAddress;
+  } else if (geocode.address) {
+    shownAddress = geocode.address;
+  } else if (geocode.status === 'pending' || geocode.status === 'idle') {
+    shownAddress = '주소 확인 중...';
+  } else {
+    shownAddress = '주소 정보 없음';
+  }
 
   return (
     <View style={styles.screen}>
@@ -94,7 +134,7 @@ export function SpotDetailScreen({ navigation, route }: RootScreenProps<'SpotDet
             <View style={styles.addressRow}>
               <PinDot />
               <Text testID="spot-address" style={[type.body, styles.address]}>
-                {spot.address ?? '주소 정보 없음'}
+                {shownAddress}
               </Text>
             </View>
 
@@ -107,6 +147,16 @@ export function SpotDetailScreen({ navigation, route }: RootScreenProps<'SpotDet
             {spot.description ? (
               <Text style={[type.body, styles.description]}>{spot.description}</Text>
             ) : null}
+
+            <View testID="spot-location-map" style={styles.mapBox}>
+              <KakaoMapView
+                center={spotPosition}
+                level={DETAIL_MAP_LEVEL}
+                selectedPosition={spotPosition}
+                geocodeRequest={geocode.request}
+                onGeocodeResult={geocode.handleResult}
+              />
+            </View>
 
             {registered ? <Text style={[type.caption, styles.registered]}>{registered}</Text> : null}
           </View>
@@ -161,5 +211,12 @@ const styles = StyleSheet.create({
     color: colors.ink,
     lineHeight: 24,
   },
-  registered: { marginTop: space.sm },
+  mapBox: {
+    height: 180,
+    marginTop: space.sm,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+    backgroundColor: colors.surface,
+  },
+  registered: { marginTop: space.xs },
 });

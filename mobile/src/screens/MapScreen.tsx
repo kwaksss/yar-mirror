@@ -4,7 +4,7 @@ import { fetchNearbySpots } from '../api/spots';
 import { KakaoMapView } from '../components/KakaoMapView';
 import type { MapFocusRequest } from '../components/kakaoMapTypes';
 import { PEEK_RATIO, SpotPreviewSheet } from '../components/SpotPreviewSheet';
-import { PlusIcon } from '../components/ui/Icons';
+import { LocateIcon, PlusIcon } from '../components/ui/Icons';
 import { DEFAULT_SEARCH_RADIUS_M, DEFAULT_MAP_LEVEL } from '../config/constants';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import { useDebouncedRegion } from '../hooks/useDebouncedRegion';
@@ -24,7 +24,9 @@ import { formatDistance, haversineMeters } from '../utils/distance';
 const TITLE_BAR_OFFSET = 64;
 
 export function MapScreen({ navigation, route }: RootScreenProps<'Map'>) {
-  const { center, usingFallback, permission, requestPermission } = useCurrentLocation();
+  const { center, usingFallback, permission, requestPermission, myPosition } = useCurrentLocation({
+    watch: true,
+  });
   const spots = useSpots();
   const insets = useInsets();
   const [error, setError] = useState<string | null>(null);
@@ -85,11 +87,26 @@ export function MapScreen({ navigation, route }: RootScreenProps<'Map'>) {
   const [focusRequest, setFocusRequest] = useState<MapFocusRequest | null>(null);
   const focusId = useRef(0);
 
+  // 내 위치 따라가기. 켜져 있으면 위치가 바뀔 때마다 지도를 내 위치로 옮긴다.
+  // 지도를 끌거나, 마커·검색 결과로 다른 곳을 보면 끈다.
+  const [following, setFollowing] = useState(false);
+
+  const panTo = useCallback((position: LatLng) => {
+    focusId.current += 1;
+    setFocusRequest({
+      id: focusId.current,
+      latitude: position.latitude,
+      longitude: position.longitude,
+      offsetY: 0,
+    });
+  }, []);
+
   const handleMarkerPress = useCallback(
     (spotId: number) => {
       const spot = spots.find((item) => item.id === spotId);
       if (!spot) return;
       setSelected(spot);
+      setFollowing(false);
 
       // 위쪽 제목 바와 아래쪽 시트 사이, 실제로 보이는 지도 영역의 가운데로 마커를 옮긴다.
       const visibleTop = insets.top + TITLE_BAR_OFFSET;
@@ -107,16 +124,35 @@ export function MapScreen({ navigation, route }: RootScreenProps<'Map'>) {
   );
 
   // 시트를 닫고 지도를 이 좌표로 옮긴다. 지도가 멈추면 idle 메시지가 오고, 그 주변 스팟을 다시 불러온다.
-  const moveTo = useCallback((position: LatLng) => {
-    setSelected(null);
-    focusId.current += 1;
-    setFocusRequest({
-      id: focusId.current,
-      latitude: position.latitude,
-      longitude: position.longitude,
-      offsetY: 0,
-    });
-  }, []);
+  const moveTo = useCallback(
+    (position: LatLng) => {
+      setSelected(null);
+      setFollowing(false);
+      panTo(position);
+    },
+    [panTo],
+  );
+
+  const myLat = myPosition?.latitude;
+  const myLng = myPosition?.longitude;
+  const followingRef = useRef(following);
+  followingRef.current = following;
+  useEffect(() => {
+    if (!followingRef.current || myLat === undefined || myLng === undefined) return;
+    panTo({ latitude: myLat, longitude: myLng });
+  }, [myLat, myLng, panTo]);
+
+  const handleLocatePress = useCallback(() => {
+    if (!myPosition) {
+      // 권한이 없거나 위치를 아직 못 받았다. 권한을 다시 요청하면 받는 대로 점이 나타난다.
+      if (permission === 'denied') void requestPermission();
+      return;
+    }
+    setFollowing(true);
+    panTo(myPosition);
+  }, [myPosition, permission, requestPermission, panTo]);
+
+  const stopFollowing = useCallback(() => setFollowing(false), []);
 
   // 스팟을 등록하고 돌아오면 등록한 위치로 옮긴다. 매번 새 객체로 오므로 같은 좌표도 다시 옮긴다.
   const focusParam = route.params?.focus;
@@ -133,10 +169,14 @@ export function MapScreen({ navigation, route }: RootScreenProps<'Map'>) {
   }, [navigation, selected]);
 
   // 위치를 못 잡아 기본 위치를 쓰는 동안에는 거리가 의미 없으므로 숨긴다.
+  // 실시간 위치가 있으면 그 위치에서 잰다.
   const distanceText =
     selected && !usingFallback
       ? formatDistance(
-          haversineMeters(center, { latitude: selected.latitude, longitude: selected.longitude }),
+          haversineMeters(myPosition ?? center, {
+            latitude: selected.latitude,
+            longitude: selected.longitude,
+          }),
         )
       : null;
 
@@ -172,6 +212,8 @@ export function MapScreen({ navigation, route }: RootScreenProps<'Map'>) {
         onRegionChange={onRegionChange}
         onMarkerPress={handleMarkerPress}
         onMapPress={closeSheet}
+        myLocation={myPosition}
+        onUserDrag={stopFollowing}
         focusRequest={focusRequest}
         geocodeRequest={geocode.request}
         onGeocodeResult={geocode.handleResult}
@@ -220,29 +262,46 @@ export function MapScreen({ navigation, route }: RootScreenProps<'Map'>) {
           bottomInset={insets.bottom}
         />
       ) : (
-        <View
-          style={[styles.bottom, { bottom: insets.bottom + space.xl }]}
-          pointerEvents="box-none"
-        >
-          {notice ? (
-            <View style={styles.notice}>
-              <Text style={styles.noticeText}>{notice}</Text>
-            </View>
-          ) : null}
+        <>
           <Pressable
-            testID="add-spot-button"
+            testID="my-location-button"
             accessibilityRole="button"
-            style={({ pressed }) => [styles.fab, floating, pressed && styles.pressed]}
-            onPress={() =>
-              navigation.navigate('SpotRegister', {
-                initialCenter: usingFallback ? settledRegion : center,
-              })
-            }
+            accessibilityLabel="내 위치로 이동"
+            accessibilityState={{ selected: following }}
+            style={({ pressed }) => [
+              styles.locateButton,
+              floating,
+              { bottom: insets.bottom + space.xl },
+              pressed && styles.pressed,
+            ]}
+            onPress={handleLocatePress}
           >
-            <PlusIcon size={14} />
-            <Text style={styles.fabText}>스팟 추가</Text>
+            <LocateIcon active={following} />
           </Pressable>
-        </View>
+          <View
+            style={[styles.bottom, { bottom: insets.bottom + space.xl }]}
+            pointerEvents="box-none"
+          >
+            {notice ? (
+              <View style={styles.notice}>
+                <Text style={styles.noticeText}>{notice}</Text>
+              </View>
+            ) : null}
+            <Pressable
+              testID="add-spot-button"
+              accessibilityRole="button"
+              style={({ pressed }) => [styles.fab, floating, pressed && styles.pressed]}
+              onPress={() =>
+                navigation.navigate('SpotRegister', {
+                  initialCenter: usingFallback ? settledRegion : center,
+                })
+              }
+            >
+              <PlusIcon size={14} />
+              <Text style={styles.fabText}>스팟 추가</Text>
+            </Pressable>
+          </View>
+        </>
       )}
     </View>
   );
@@ -252,6 +311,17 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   top: { position: 'absolute', left: space.lg, right: space.lg, gap: space.sm },
   searchBox: { backgroundColor: colors.paper, minHeight: 52 },
+  // "스팟 추가" 버튼(높이 52)과 같은 높이, 오른쪽 아래.
+  locateButton: {
+    position: 'absolute',
+    right: space.lg,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: colors.paper,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   count: {
     ...type.caption,
     color: colors.accent,

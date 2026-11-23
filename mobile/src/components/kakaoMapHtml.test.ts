@@ -48,4 +48,12 @@ describe('buildKakaoMapHtml', () => {
     expect(html).toContain('point.y + (offsetY || 0)');
     expect(html).toContain('map.panTo(nextCenter)');
   });
+
+  it('draws a movable my-location dot and reports when the user starts dragging', () => {
+    expect(html).toContain('setMyLocation: function (lat, lng)');
+    expect(html).toContain('new kakao.maps.CustomOverlay');
+    expect(html).toContain('myLocation.setPosition(position)');
+    expect(html).toContain("addListener(map, 'dragstart'");
+    expect(html).toContain("type: 'dragstart'");
+  });
 });

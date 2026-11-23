@@ -10,6 +10,7 @@ import type { Spot } from '../types/spot';
 export type KakaoMapMessage =
   | { type: 'ready' }
   | { type: 'error'; message: string }
+  | { type: 'dragstart' }
   | ({ type: 'idle' } & MapRegion)
   | ({ type: 'mapPress' } & LatLng)
   | { type: 'markerPress'; spotId: number }
@@ -23,6 +24,10 @@ export type KakaoMapViewProps = {
   onRegionChange?: (region: MapRegion) => void;
   onMarkerPress?: (spotId: number) => void;
   onMapPress?: (position: LatLng) => void;
+  /** 실시간 내 위치 점. null/생략이면 그리지 않는다. */
+  myLocation?: LatLng | null;
+  /** 사용자가 지도를 끌기 시작했을 때. */
+  onUserDrag?: () => void;
   /** 사용자가 고른 위치에 표시할 단일 마커. null/생략이면 표시하지 않는다. */
   selectedPosition?: LatLng | null;
   /**

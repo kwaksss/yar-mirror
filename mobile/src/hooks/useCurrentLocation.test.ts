@@ -8,6 +8,7 @@ jest.mock('expo-location', () => ({
   Accuracy: { Balanced: 3 },
   requestForegroundPermissionsAsync: jest.fn(),
   getCurrentPositionAsync: jest.fn(),
+  watchPositionAsync: jest.fn(),
 }));
 
 const mocked = Location as jest.Mocked<typeof Location>;
@@ -93,5 +94,62 @@ describe('useCurrentLocation', () => {
 
     expect(result.current.permission).toBe('granted');
     expect(result.current.center).toEqual(gangnam);
+  });
+
+  describe('watch', () => {
+    const grantWithFix = () => {
+      mocked.requestForegroundPermissionsAsync.mockResolvedValue({
+        status: Location.PermissionStatus.GRANTED,
+      } as any);
+      mocked.getCurrentPositionAsync.mockResolvedValue({ coords: gangnam } as any);
+    };
+
+    it('does not subscribe unless asked to', async () => {
+      grantWithFix();
+      const { result } = await renderHook(() => useCurrentLocation());
+
+      await waitFor(() => expect(result.current.permission).toBe('granted'));
+      expect(mocked.watchPositionAsync).not.toHaveBeenCalled();
+      expect(result.current.myPosition).toBeNull();
+    });
+
+    it('follows position updates every 5m without moving the initial centre', async () => {
+      grantWithFix();
+      let emit: (position: unknown) => void = () => undefined;
+      const remove = jest.fn();
+      mocked.watchPositionAsync.mockImplementation(async (_options, callback) => {
+        emit = callback as typeof emit;
+        return { remove } as any;
+      });
+
+      const { result, unmount } = await renderHook(() => useCurrentLocation({ watch: true }));
+
+      await waitFor(() => expect(result.current.myPosition).toEqual(gangnam));
+      expect(mocked.watchPositionAsync).toHaveBeenCalledWith(
+        expect.objectContaining({ distanceInterval: 5 }),
+        expect.any(Function),
+      );
+
+      const moved = { latitude: 37.4985, longitude: 127.028 };
+      await act(async () => emit({ coords: moved }));
+
+      expect(result.current.myPosition).toEqual(moved);
+      expect(result.current.center).toEqual(gangnam);
+
+      await unmount();
+      expect(remove).toHaveBeenCalled();
+    });
+
+    it('never subscribes when permission is denied', async () => {
+      mocked.requestForegroundPermissionsAsync.mockResolvedValue({
+        status: Location.PermissionStatus.DENIED,
+      } as any);
+
+      const { result } = await renderHook(() => useCurrentLocation({ watch: true }));
+
+      await waitFor(() => expect(result.current.permission).toBe('denied'));
+      expect(mocked.watchPositionAsync).not.toHaveBeenCalled();
+      expect(result.current.myPosition).toBeNull();
+    });
   });
 });

@@ -22,6 +22,11 @@ export function buildKakaoMapHtml({ jsKey, center, level }: KakaoMapHtmlOptions)
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <style>
     html, body, #map { margin: 0; padding: 0; width: 100%; height: 100%; }
+    .my-location {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: #2F80ED; border: 3px solid #FFFFFF;
+      box-shadow: 0 0 0 1px rgba(22, 26, 35, 0.18), 0 2px 6px rgba(22, 26, 35, 0.3);
+    }
   </style>
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(jsKey)}&libraries=services&autoload=false"></script>
 </head>
@@ -61,6 +66,7 @@ export function buildKakaoMapHtml({ jsKey, center, level }: KakaoMapHtmlOptions)
         var selectedMarker = null;
         var geocoder = null;
         var places = null;
+        var myLocation = null;
 
         var emitIdle = function () {
           var c = map.getCenter();
@@ -75,6 +81,10 @@ export function buildKakaoMapHtml({ jsKey, center, level }: KakaoMapHtmlOptions)
         };
 
         kakao.maps.event.addListener(map, 'idle', emitIdle);
+        // 사용자가 지도를 끌기 시작하면 알린다. 앱은 이때 내 위치 따라가기를 끈다.
+        kakao.maps.event.addListener(map, 'dragstart', function () {
+          send({ type: 'dragstart' });
+        });
         kakao.maps.event.addListener(map, 'click', function (e) {
           send({
             type: 'mapPress',
@@ -111,6 +121,30 @@ export function buildKakaoMapHtml({ jsKey, center, level }: KakaoMapHtmlOptions)
             } else {
               selectedMarker.setPosition(position);
               selectedMarker.setMap(map);
+            }
+          },
+          // 실시간 내 위치 점. null 이면 지운다. 스팟 마커를 가리지 않도록 마커보다 아래에 그린다.
+          setMyLocation: function (lat, lng) {
+            if (lat === null || lng === null) {
+              if (myLocation) myLocation.setMap(null);
+              myLocation = null;
+              return;
+            }
+            var position = new kakao.maps.LatLng(lat, lng);
+            if (!myLocation) {
+              var dot = document.createElement('div');
+              dot.className = 'my-location';
+              myLocation = new kakao.maps.CustomOverlay({
+                map: map,
+                position: position,
+                content: dot,
+                xAnchor: 0.5,
+                yAnchor: 0.5,
+                zIndex: 0
+              });
+            } else {
+              myLocation.setPosition(position);
+              myLocation.setMap(map);
             }
           },
           // 좌표를 화면 가운데보다 offsetY(px)만큼 위에 오도록 부드럽게 옮긴다.

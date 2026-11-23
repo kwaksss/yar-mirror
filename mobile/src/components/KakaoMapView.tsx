@@ -28,6 +28,11 @@ const setSelectedScript = (position: LatLng | null) =>
     ? `window.MirrorSpot && window.MirrorSpot.setSelected(${position.latitude}, ${position.longitude}); true;`
     : `window.MirrorSpot && window.MirrorSpot.setSelected(null, null); true;`;
 
+const setMyLocationScript = (position: LatLng | null) =>
+  position
+    ? `window.MirrorSpot && window.MirrorSpot.setMyLocation(${position.latitude}, ${position.longitude}); true;`
+    : `window.MirrorSpot && window.MirrorSpot.setMyLocation(null, null); true;`;
+
 const focusScript = (request: MapFocusRequest) =>
   `window.MirrorSpot && window.MirrorSpot.focusOn(${request.latitude}, ${request.longitude}, ${request.offsetY}); true;`;
 
@@ -45,6 +50,8 @@ export function KakaoMapView({
   onRegionChange,
   onMarkerPress,
   onMapPress,
+  myLocation = null,
+  onUserDrag,
   selectedPosition = null,
   focusRequest = null,
   geocodeRequest = null,
@@ -86,6 +93,17 @@ export function KakaoMapView({
   useEffect(() => {
     readyRef.current = false;
   }, [html]);
+
+  const myLocationRef = useRef<LatLng | null>(myLocation);
+  const myLat = myLocation?.latitude;
+  const myLng = myLocation?.longitude;
+  useEffect(() => {
+    const next =
+      myLat === undefined || myLng === undefined ? null : { latitude: myLat, longitude: myLng };
+    myLocationRef.current = next;
+    if (!readyRef.current) return;
+    webViewRef.current?.injectJavaScript(setMyLocationScript(next));
+  }, [myLat, myLng]);
 
   const selectedLat = selectedPosition?.latitude;
   const selectedLng = selectedPosition?.longitude;
@@ -151,6 +169,7 @@ export function KakaoMapView({
           webViewRef.current?.injectJavaScript(setCenterScript(centerRef.current));
           webViewRef.current?.injectJavaScript(setMarkersScript(markersRef.current));
           webViewRef.current?.injectJavaScript(setSelectedScript(selectedRef.current));
+          webViewRef.current?.injectJavaScript(setMyLocationScript(myLocationRef.current));
           if (geocodeRef.current) {
             webViewRef.current?.injectJavaScript(reverseGeocodeScript(geocodeRef.current));
           }
@@ -170,6 +189,9 @@ export function KakaoMapView({
             level: message.level,
             radius: message.radius,
           });
+          break;
+        case 'dragstart':
+          onUserDrag?.();
           break;
         case 'markerPress':
           onMarkerPress?.(message.spotId);
@@ -195,7 +217,7 @@ export function KakaoMapView({
           break;
       }
     },
-    [onRegionChange, onMarkerPress, onMapPress, onGeocodeResult, onPlaceSearchResult],
+    [onRegionChange, onMarkerPress, onMapPress, onUserDrag, onGeocodeResult, onPlaceSearchResult],
   );
 
   if (!kakaoJsKey) {

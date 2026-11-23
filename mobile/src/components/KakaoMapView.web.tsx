@@ -19,6 +19,7 @@ type MirrorSpotApi = {
   setMarkers: (list: MarkerPayload[]) => void;
   setCenter: (latitude: number, longitude: number) => void;
   setSelected: (latitude: number | null, longitude: number | null) => void;
+  setMyLocation: (latitude: number | null, longitude: number | null) => void;
   focusOn: (latitude: number, longitude: number, offsetY: number) => void;
 };
 
@@ -41,6 +42,8 @@ export function KakaoMapView({
   onRegionChange,
   onMarkerPress,
   onMapPress,
+  myLocation = null,
+  onUserDrag,
   selectedPosition = null,
   focusRequest = null,
   geocodeRequest = null,
@@ -86,6 +89,17 @@ export function KakaoMapView({
   useEffect(() => {
     readyRef.current = false;
   }, [html]);
+
+  const myLocationRef = useRef<LatLng | null>(myLocation);
+  const myLat = myLocation?.latitude;
+  const myLng = myLocation?.longitude;
+  useEffect(() => {
+    const next =
+      myLat === undefined || myLng === undefined ? null : { latitude: myLat, longitude: myLng };
+    myLocationRef.current = next;
+    if (!readyRef.current) return;
+    getApi()?.setMyLocation(next?.latitude ?? null, next?.longitude ?? null);
+  }, [myLat, myLng, getApi]);
 
   const selectedLat = selectedPosition?.latitude;
   const selectedLng = selectedPosition?.longitude;
@@ -166,6 +180,10 @@ export function KakaoMapView({
             selectedRef.current?.latitude ?? null,
             selectedRef.current?.longitude ?? null,
           );
+          api?.setMyLocation(
+            myLocationRef.current?.latitude ?? null,
+            myLocationRef.current?.longitude ?? null,
+          );
           // setCenter 다음에 적용해야 중심을 덮어쓰지 않는다.
           const pendingFocus = pendingFocusRef.current;
           if (pendingFocus) {
@@ -181,6 +199,9 @@ export function KakaoMapView({
             level: message.level,
             radius: message.radius,
           });
+          break;
+        case 'dragstart':
+          onUserDrag?.();
           break;
         case 'markerPress':
           onMarkerPress?.(message.spotId);
@@ -199,7 +220,7 @@ export function KakaoMapView({
           break;
       }
     },
-    [getApi, onRegionChange, onMarkerPress, onMapPress, onGeocodeResult],
+    [getApi, onRegionChange, onMarkerPress, onMapPress, onUserDrag, onGeocodeResult],
   );
 
   useEffect(() => {

@@ -5,7 +5,7 @@ import { FALLBACK_CENTER, LOCATION_TIMEOUT_MS } from '../config/constants';
 
 jest.mock('expo-location', () => ({
   PermissionStatus: { GRANTED: 'granted', DENIED: 'denied', UNDETERMINED: 'undetermined' },
-  Accuracy: { Balanced: 3 },
+  Accuracy: { Balanced: 3, High: 4 },
   requestForegroundPermissionsAsync: jest.fn(),
   getCurrentPositionAsync: jest.fn(),
   watchPositionAsync: jest.fn(),
@@ -126,7 +126,8 @@ describe('useCurrentLocation', () => {
 
       await waitFor(() => expect(result.current.myPosition).toEqual(gangnam));
       expect(mocked.watchPositionAsync).toHaveBeenCalledWith(
-        expect.objectContaining({ distanceInterval: 5 }),
+        // GPS 정밀도. Balanced(3)는 iOS 에서 약 100m 라 걸어도 점이 그대로였다.
+        expect.objectContaining({ distanceInterval: 5, accuracy: 4 }),
         expect.any(Function),
       );
 

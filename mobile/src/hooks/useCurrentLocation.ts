@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
 import * as Location from 'expo-location';
 import {
   FALLBACK_CENTER,
@@ -40,6 +41,15 @@ export type CurrentLocationOptions = {
   watch?: boolean;
 };
 
+// 걸으며 움직이는 점을 보여 주려면 GPS 가 필요하다. Balanced 는 iOS 에서 약 100m 정밀도라 50m 이동도 놓친다.
+// 웹에서는 expo-location 이 옵션을 navigator.geolocation 에 그대로 넘기고 accuracy 는 무시되므로,
+// enableHighAccuracy 를 직접 켜야 Safari 가 Wi-Fi 추정 대신 GPS 를 쓴다.
+const WATCH_OPTIONS = {
+  accuracy: Location.Accuracy.High,
+  distanceInterval: LOCATION_WATCH_DISTANCE_M,
+  ...(Platform.OS === 'web' ? { enableHighAccuracy: true } : {}),
+} as Location.LocationOptions;
+
 export function useCurrentLocation({ watch = false }: CurrentLocationOptions = {}): CurrentLocation {
   const [center, setCenter] = useState<LatLng>(FALLBACK_CENTER);
   const [usingFallback, setUsingFallback] = useState(true);
@@ -52,7 +62,7 @@ export function useCurrentLocation({ watch = false }: CurrentLocationOptions = {
     if (!watch || subscriptionRef.current) return;
     try {
       const subscription = await Location.watchPositionAsync(
-        { accuracy: Location.Accuracy.Balanced, distanceInterval: LOCATION_WATCH_DISTANCE_M },
+        WATCH_OPTIONS,
         (position) =>
           setMyPosition({
             latitude: position.coords.latitude,

@@ -9,6 +9,9 @@ import { DEFAULT_SEARCH_RADIUS_M, DEFAULT_MAP_LEVEL } from '../config/constants'
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
 import { useDebouncedRegion } from '../hooks/useDebouncedRegion';
 import { useInsets } from '../hooks/useInsets';
+import { usePlaceSearch } from '../hooks/usePlaceSearch';
+import { PlaceSearchBar } from '../components/PlaceSearchBar';
+import type { LatLng } from '../types/geo';
 import { useReverseGeocode } from '../hooks/useReverseGeocode';
 import { displayableAddress } from '../utils/address';
 import type { RootScreenProps } from '../navigation/types';
@@ -20,7 +23,7 @@ import { formatDistance, haversineMeters } from '../utils/distance';
 /** 화면 위쪽에 떠 있는 제목 바가 차지하는 높이(여백 12 + 바 52). */
 const TITLE_BAR_OFFSET = 64;
 
-export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
+export function MapScreen({ navigation, route }: RootScreenProps<'Map'>) {
   const { center, usingFallback, permission, requestPermission } = useCurrentLocation();
   const spots = useSpots();
   const insets = useInsets();
@@ -103,6 +106,26 @@ export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
     [spots, insets.top, windowHeight],
   );
 
+  // 시트를 닫고 지도를 이 좌표로 옮긴다. 지도가 멈추면 idle 메시지가 오고, 그 주변 스팟을 다시 불러온다.
+  const moveTo = useCallback((position: LatLng) => {
+    setSelected(null);
+    focusId.current += 1;
+    setFocusRequest({
+      id: focusId.current,
+      latitude: position.latitude,
+      longitude: position.longitude,
+      offsetY: 0,
+    });
+  }, []);
+
+  // 스팟을 등록하고 돌아오면 등록한 위치로 옮긴다. 매번 새 객체로 오므로 같은 좌표도 다시 옮긴다.
+  const focusParam = route.params?.focus;
+  useEffect(() => {
+    if (focusParam) moveTo(focusParam);
+  }, [focusParam, moveTo]);
+
+  const placeSearch = usePlaceSearch();
+
   const closeSheet = useCallback(() => setSelected(null), []);
 
   const openDetail = useCallback(() => {
@@ -152,15 +175,22 @@ export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
         focusRequest={focusRequest}
         geocodeRequest={geocode.request}
         onGeocodeResult={geocode.handleResult}
+        placeSearchRequest={placeSearch.request}
+        onPlaceSearchResult={placeSearch.handleResult}
       />
 
       <View style={[styles.top, { top: insets.top + space.md }]} pointerEvents="box-none">
-        <View style={[styles.titleBar, floating]}>
-          <Text style={type.heading}>거울샷 스팟</Text>
-          <Text testID="nearby-count" style={styles.count}>
-            주변 {spots.length}곳
-          </Text>
-        </View>
+        <PlaceSearchBar
+          search={placeSearch}
+          onSelect={moveTo}
+          placeholder="장소, 주소 검색 (예: 망원역)"
+          inputBoxStyle={[styles.searchBox, floating]}
+          trailing={
+            <Text testID="nearby-count" style={styles.count}>
+              주변 {spots.length}곳
+            </Text>
+          }
+        />
 
         {permission === 'denied' ? (
           <View testID="location-permission-banner" style={[styles.banner, floating]}>
@@ -221,16 +251,7 @@ export function MapScreen({ navigation }: RootScreenProps<'Map'>) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.surface },
   top: { position: 'absolute', left: space.lg, right: space.lg, gap: space.sm },
-  titleBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: colors.paper,
-    borderRadius: radius.pill,
-    paddingLeft: space.xl,
-    paddingRight: space.sm,
-    height: 52,
-  },
+  searchBox: { backgroundColor: colors.paper, minHeight: 52 },
   count: {
     ...type.caption,
     color: colors.accent,

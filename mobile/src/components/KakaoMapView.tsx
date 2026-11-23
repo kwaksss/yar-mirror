@@ -3,6 +3,7 @@ import { StyleSheet, Text, View } from 'react-native';
 import { WebView, type WebViewMessageEvent } from 'react-native-webview';
 import { DEFAULT_MAP_LEVEL } from '../config/constants';
 import { getAppExtra } from '../config/env';
+import type { PlaceSearchRequest } from '../hooks/usePlaceSearch';
 import type { ReverseGeocodeRequest } from '../hooks/useReverseGeocode';
 import type { LatLng } from '../types/geo';
 import { buildKakaoMapHtml } from './kakaoMapHtml';
@@ -30,6 +31,10 @@ const setSelectedScript = (position: LatLng | null) =>
 const focusScript = (request: MapFocusRequest) =>
   `window.MirrorSpot && window.MirrorSpot.focusOn(${request.latitude}, ${request.longitude}, ${request.offsetY}); true;`;
 
+// 검색어는 사용자가 입력한 문자열이라 JSON.stringify 로 감싸 스크립트에 넣는다.
+const searchPlacesScript = (request: PlaceSearchRequest) =>
+  `window.MirrorSpot && window.MirrorSpot.searchPlaces(${request.id}, ${JSON.stringify(request.query)}); true;`;
+
 const reverseGeocodeScript = (request: ReverseGeocodeRequest) =>
   `window.MirrorSpot && window.MirrorSpot.reverseGeocode(${request.id}, ${request.latitude}, ${request.longitude}); true;`;
 
@@ -44,6 +49,8 @@ export function KakaoMapView({
   focusRequest = null,
   geocodeRequest = null,
   onGeocodeResult,
+  placeSearchRequest = null,
+  onPlaceSearchResult,
 }: KakaoMapViewProps) {
   const webViewRef = useRef<WebView>(null);
   const { kakaoJsKey } = getAppExtra();
@@ -104,9 +111,15 @@ export function KakaoMapView({
     webViewRef.current?.injectJavaScript(setMarkersScript(markerPayload));
   }, [markerPayload]);
 
-  // 마커를 누를 때 생기는 요청이라 지도가 이미 준비된 뒤다. 준비 전 요청은 버린다.
+  // 준비 전에 온 요청(예: 등록 직후 돌아왔는데 지도가 다시 로드되는 중)은 들고 있다가 'ready' 때 적용한다.
+  const pendingFocusRef = useRef<MapFocusRequest | null>(null);
   useEffect(() => {
-    if (!focusRequest || !readyRef.current) return;
+    if (!focusRequest) return;
+    if (!readyRef.current) {
+      pendingFocusRef.current = focusRequest;
+      return;
+    }
+    pendingFocusRef.current = null;
     webViewRef.current?.injectJavaScript(focusScript(focusRequest));
   }, [focusRequest]);
 
@@ -115,6 +128,13 @@ export function KakaoMapView({
     if (!geocodeRequest || !readyRef.current) return;
     webViewRef.current?.injectJavaScript(reverseGeocodeScript(geocodeRequest));
   }, [geocodeRequest]);
+
+  const placeSearchRef = useRef<PlaceSearchRequest | null>(placeSearchRequest);
+  useEffect(() => {
+    placeSearchRef.current = placeSearchRequest;
+    if (!placeSearchRequest || !readyRef.current) return;
+    webViewRef.current?.injectJavaScript(searchPlacesScript(placeSearchRequest));
+  }, [placeSearchRequest]);
 
   const handleMessage = useCallback(
     (event: WebViewMessageEvent) => {
@@ -133,6 +153,14 @@ export function KakaoMapView({
           webViewRef.current?.injectJavaScript(setSelectedScript(selectedRef.current));
           if (geocodeRef.current) {
             webViewRef.current?.injectJavaScript(reverseGeocodeScript(geocodeRef.current));
+          }
+          if (placeSearchRef.current) {
+            webViewRef.current?.injectJavaScript(searchPlacesScript(placeSearchRef.current));
+          }
+          // setCenter 다음에 적용해야 중심을 덮어쓰지 않는다.
+          if (pendingFocusRef.current) {
+            webViewRef.current?.injectJavaScript(focusScript(pendingFocusRef.current));
+            pendingFocusRef.current = null;
           }
           break;
         case 'idle':
@@ -156,11 +184,18 @@ export function KakaoMapView({
             lotAddress: message.lotAddress ?? null,
           });
           break;
+        case 'places':
+          onPlaceSearchResult?.({
+            id: message.id,
+            places: Array.isArray(message.places) ? message.places : [],
+            failed: Boolean(message.failed),
+          });
+          break;
         default:
           break;
       }
     },
-    [onRegionChange, onMarkerPress, onMapPress, onGeocodeResult],
+    [onRegionChange, onMarkerPress, onMapPress, onGeocodeResult, onPlaceSearchResult],
   );
 
   if (!kakaoJsKey) {

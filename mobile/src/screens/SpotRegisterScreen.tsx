@@ -14,7 +14,9 @@ import { confirmUpload, createSpot, uploadPhoto } from '../api/spots';
 import { DEFAULT_MAP_LEVEL } from '../config/constants';
 import { KakaoMapView } from '../components/KakaoMapView';
 import { useCurrentLocation } from '../hooks/useCurrentLocation';
+import { usePlaceSearch } from '../hooks/usePlaceSearch';
 import { useReverseGeocode } from '../hooks/useReverseGeocode';
+import { PlaceSearchBar } from '../components/PlaceSearchBar';
 import type { RootScreenProps } from '../navigation/types';
 import { registerSpot } from '../spots/registerSpot';
 import { addOptimisticSpot, removeSpot, replaceSpot } from '../spots/spotsStore';
@@ -36,6 +38,7 @@ export function SpotRegisterScreen({ navigation, route }: RootScreenProps<'SpotR
   const resolvedPosition = position ?? center;
   const canSubmit = Boolean(photo) && name.trim().length > 0 && !submitting;
 
+  const placeSearch = usePlaceSearch();
   const geocode = useReverseGeocode();
   const { requestAddress } = geocode;
   const { latitude, longitude } = resolvedPosition;
@@ -103,7 +106,9 @@ export function SpotRegisterScreen({ navigation, route }: RootScreenProps<'SpotR
           replaceSpot,
         },
       );
-      navigation.navigate('Map');
+      navigation.navigate('Map', {
+        focus: { latitude: resolvedPosition.latitude, longitude: resolvedPosition.longitude },
+      });
     } catch {
       setError('스팟 등록에 실패했습니다. 잠시 후 다시 시도해 주세요.');
     } finally {
@@ -120,6 +125,12 @@ export function SpotRegisterScreen({ navigation, route }: RootScreenProps<'SpotR
       <View style={styles.column}>
         <View style={styles.section}>
           <Text style={type.heading}>위치</Text>
+          {/* 고른 장소로 핀을 옮긴다. 지도 중심도 핀을 따라가고, 주소도 다시 조회된다. */}
+          <PlaceSearchBar
+            search={placeSearch}
+            onSelect={(place) => setPosition({ latitude: place.latitude, longitude: place.longitude })}
+            placeholder="장소, 주소 검색 (예: 망원역)"
+          />
           <View style={styles.mapBox}>
             <KakaoMapView
               center={resolvedPosition}
@@ -128,6 +139,8 @@ export function SpotRegisterScreen({ navigation, route }: RootScreenProps<'SpotR
               selectedPosition={resolvedPosition}
               geocodeRequest={geocode.request}
               onGeocodeResult={geocode.handleResult}
+              placeSearchRequest={placeSearch.request}
+              onPlaceSearchResult={placeSearch.handleResult}
             />
           </View>
           <View style={styles.addressRow}>

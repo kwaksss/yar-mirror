@@ -124,4 +124,65 @@ describe('MapScreen spot preview', () => {
       .find((script) => script.includes('focusOn'));
     expect(focus).toContain('focusOn(37.5445, 127.0557,');
   });
+
+  it('pans to the newly registered spot when returning from registration', async () => {
+    const { rerender } = await renderScreen();
+    await post({ type: 'ready' });
+    mockInjectJavaScript.mockClear();
+
+    await rerender(
+      <MapScreen
+        navigation={navigation as never}
+        route={
+          {
+            key: 'Map',
+            name: 'Map',
+            params: { focus: { latitude: 37.55, longitude: 127.04 } },
+          } as never
+        }
+      />,
+    );
+
+    const focus = mockInjectJavaScript.mock.calls
+      .map((call) => String(call[0]))
+      .find((script) => script.includes('focusOn'));
+    expect(focus).toContain('focusOn(37.55, 127.04, 0)');
+  });
 });
+
+describe('MapScreen place search', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetSpots();
+    mockFetchNearbySpots.mockResolvedValue([spot]);
+  });
+
+  it('searches through the map SDK and pans to the picked place', async () => {
+    await renderScreen();
+    await post({ type: 'ready' });
+    mockInjectJavaScript.mockClear();
+
+    await fireEvent.changeText(screen.getByTestId('place-search-input'), '망원역');
+    await fireEvent(screen.getByTestId('place-search-input'), 'submitEditing');
+
+    const searchScript = mockInjectJavaScript.mock.calls
+      .map((call) => String(call[0]))
+      .find((script) => script.includes('searchPlaces'));
+    expect(searchScript).toContain('searchPlaces(1, "망원역")');
+
+    await post({
+      type: 'places',
+      id: 1,
+      failed: false,
+      places: [{ name: '망원역 6호선', address: null, latitude: 37.5559, longitude: 126.9101 }],
+    });
+    await fireEvent.press(screen.getByTestId('place-search-result-0'));
+
+    const focus = mockInjectJavaScript.mock.calls
+      .map((call) => String(call[0]))
+      .find((script) => script.includes('focusOn'));
+    expect(focus).toContain('focusOn(37.5559, 126.9101, 0)');
+    expect(screen.queryByTestId('place-search-results')).toBeNull();
+  });
+});
+

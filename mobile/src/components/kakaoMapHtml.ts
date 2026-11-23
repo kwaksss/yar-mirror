@@ -60,6 +60,7 @@ export function buildKakaoMapHtml({ jsKey, center, level }: KakaoMapHtmlOptions)
         var markers = [];
         var selectedMarker = null;
         var geocoder = null;
+        var places = null;
 
         var emitIdle = function () {
           var c = map.getCenter();
@@ -148,6 +149,41 @@ export function buildKakaoMapHtml({ jsKey, center, level }: KakaoMapHtmlOptions)
                   id: id,
                   roadAddress: doc.road_address ? doc.road_address.address_name : null,
                   lotAddress: doc.address ? doc.address.address_name : null
+                });
+              });
+            } catch (e) {
+              fail();
+            }
+          },
+          searchPlaces: function (id, query) {
+            var fail = function () {
+              send({ type: 'places', id: id, places: [], failed: true });
+            };
+            if (!kakao.maps.services || !kakao.maps.services.Places) {
+              fail();
+              return;
+            }
+            if (!places) places = new kakao.maps.services.Places();
+            try {
+              places.keywordSearch(query, function (result, status) {
+                var Status = kakao.maps.services.Status;
+                if (status !== Status.OK && status !== Status.ZERO_RESULT) {
+                  fail();
+                  return;
+                }
+                var list = status === Status.OK && result ? result : [];
+                send({
+                  type: 'places',
+                  id: id,
+                  failed: false,
+                  places: list.map(function (doc) {
+                    return {
+                      name: doc.place_name,
+                      address: doc.road_address_name || doc.address_name || null,
+                      latitude: Number(doc.y),
+                      longitude: Number(doc.x)
+                    };
+                  })
                 });
               });
             } catch (e) {

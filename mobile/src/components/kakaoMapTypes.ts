@@ -2,6 +2,7 @@ import type {
   ReverseGeocodeRequest,
   ReverseGeocodeResult,
 } from '../hooks/useReverseGeocode';
+import type { PlaceSearchRequest, PlaceSearchResult } from '../hooks/usePlaceSearch';
 import type { LatLng, MapRegion } from '../types/geo';
 import type { Spot } from '../types/spot';
 
@@ -12,7 +13,8 @@ export type KakaoMapMessage =
   | ({ type: 'idle' } & MapRegion)
   | ({ type: 'mapPress' } & LatLng)
   | { type: 'markerPress'; spotId: number }
-  | ({ type: 'geocode' } & ReverseGeocodeResult);
+  | ({ type: 'geocode' } & ReverseGeocodeResult)
+  | ({ type: 'places' } & PlaceSearchResult);
 
 export type KakaoMapViewProps = {
   center: LatLng;
@@ -31,6 +33,9 @@ export type KakaoMapViewProps = {
   /** Coordinate to reverse-geocode through the already-loaded Kakao JS SDK. */
   geocodeRequest?: ReverseGeocodeRequest | null;
   onGeocodeResult?: (result: ReverseGeocodeResult) => void;
+  /** 이 검색어로 카카오 장소 검색을 한다. 결과는 onPlaceSearchResult 로 온다. */
+  placeSearchRequest?: PlaceSearchRequest | null;
+  onPlaceSearchResult?: (result: PlaceSearchResult) => void;
 };
 
 export type MapFocusRequest = LatLng & {

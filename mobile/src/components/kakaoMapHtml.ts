@@ -22,6 +22,11 @@ export function buildKakaoMapHtml({ jsKey, center, level }: KakaoMapHtmlOptions)
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <style>
     html, body, #map { margin: 0; padding: 0; width: 100%; height: 100%; }
+    .my-location {
+      width: 14px; height: 14px; border-radius: 50%;
+      background: #2F80ED; border: 3px solid #FFFFFF;
+      box-shadow: 0 0 0 1px rgba(22, 26, 35, 0.18), 0 2px 6px rgba(22, 26, 35, 0.3);
+    }
   </style>
   <script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=${encodeURIComponent(jsKey)}&libraries=services&autoload=false"></script>
 </head>
@@ -60,6 +65,8 @@ export function buildKakaoMapHtml({ jsKey, center, level }: KakaoMapHtmlOptions)
         var markers = [];
         var selectedMarker = null;
         var geocoder = null;
+        var places = null;
+        var myLocation = null;
 
         var emitIdle = function () {
           var c = map.getCenter();
@@ -74,6 +81,10 @@ export function buildKakaoMapHtml({ jsKey, center, level }: KakaoMapHtmlOptions)
         };
 
         kakao.maps.event.addListener(map, 'idle', emitIdle);
+        // 사용자가 지도를 끌기 시작하면 알린다. 앱은 이때 내 위치 따라가기를 끈다.
+        kakao.maps.event.addListener(map, 'dragstart', function () {
+          send({ type: 'dragstart' });
+        });
         kakao.maps.event.addListener(map, 'click', function (e) {
           send({
             type: 'mapPress',
@@ -112,6 +123,30 @@ export function buildKakaoMapHtml({ jsKey, center, level }: KakaoMapHtmlOptions)
               selectedMarker.setMap(map);
             }
           },
+          // 실시간 내 위치 점. null 이면 지운다. 스팟 마커를 가리지 않도록 마커보다 아래에 그린다.
+          setMyLocation: function (lat, lng) {
+            if (lat === null || lng === null) {
+              if (myLocation) myLocation.setMap(null);
+              myLocation = null;
+              return;
+            }
+            var position = new kakao.maps.LatLng(lat, lng);
+            if (!myLocation) {
+              var dot = document.createElement('div');
+              dot.className = 'my-location';
+              myLocation = new kakao.maps.CustomOverlay({
+                map: map,
+                position: position,
+                content: dot,
+                xAnchor: 0.5,
+                yAnchor: 0.5,
+                zIndex: 0
+              });
+            } else {
+              myLocation.setPosition(position);
+              myLocation.setMap(map);
+            }
+          },
           // 좌표를 화면 가운데보다 offsetY(px)만큼 위에 오도록 부드럽게 옮긴다.
           // 아래쪽을 가리는 미리보기 시트 위, 보이는 영역의 가운데에 마커를 두기 위해서다.
           focusOn: function (lat, lng, offsetY) {
@@ -148,6 +183,41 @@ export function buildKakaoMapHtml({ jsKey, center, level }: KakaoMapHtmlOptions)
                   id: id,
                   roadAddress: doc.road_address ? doc.road_address.address_name : null,
                   lotAddress: doc.address ? doc.address.address_name : null
+                });
+              });
+            } catch (e) {
+              fail();
+            }
+          },
+          searchPlaces: function (id, query) {
+            var fail = function () {
+              send({ type: 'places', id: id, places: [], failed: true });
+            };
+            if (!kakao.maps.services || !kakao.maps.services.Places) {
+              fail();
+              return;
+            }
+            if (!places) places = new kakao.maps.services.Places();
+            try {
+              places.keywordSearch(query, function (result, status) {
+                var Status = kakao.maps.services.Status;
+                if (status !== Status.OK && status !== Status.ZERO_RESULT) {
+                  fail();
+                  return;
+                }
+                var list = status === Status.OK && result ? result : [];
+                send({
+                  type: 'places',
+                  id: id,
+                  failed: false,
+                  places: list.map(function (doc) {
+                    return {
+                      name: doc.place_name,
+                      address: doc.road_address_name || doc.address_name || null,
+                      latitude: Number(doc.y),
+                      longitude: Number(doc.x)
+                    };
+                  })
                 });
               });
             } catch (e) {

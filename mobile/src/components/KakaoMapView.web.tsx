@@ -4,8 +4,13 @@ import { DEFAULT_MAP_LEVEL } from '../config/constants';
 import { getAppExtra } from '../config/env';
 import type { LatLng } from '../types/geo';
 import { buildKakaoMapHtml } from './kakaoMapHtml';
-import { reverseGeocodeOnWeb } from './kakaoWebGeocoder';
-import type { KakaoMapMessage, KakaoMapViewProps, MarkerPayload } from './kakaoMapTypes';
+import { reverseGeocodeOnWeb, searchPlacesOnWeb } from './kakaoWebGeocoder';
+import type {
+  KakaoMapMessage,
+  KakaoMapViewProps,
+  MapFocusRequest,
+  MarkerPayload,
+} from './kakaoMapTypes';
 
 export type { KakaoMapMessage, KakaoMapViewProps } from './kakaoMapTypes';
 
@@ -14,6 +19,7 @@ type MirrorSpotApi = {
   setMarkers: (list: MarkerPayload[]) => void;
   setCenter: (latitude: number, longitude: number) => void;
   setSelected: (latitude: number | null, longitude: number | null) => void;
+  setMyLocation: (latitude: number | null, longitude: number | null) => void;
   focusOn: (latitude: number, longitude: number, offsetY: number) => void;
 };
 
@@ -36,10 +42,14 @@ export function KakaoMapView({
   onRegionChange,
   onMarkerPress,
   onMapPress,
+  myLocation = null,
+  onUserDrag,
   selectedPosition = null,
   focusRequest = null,
   geocodeRequest = null,
   onGeocodeResult,
+  placeSearchRequest = null,
+  onPlaceSearchResult,
 }: KakaoMapViewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const { kakaoJsKey } = getAppExtra();
@@ -80,6 +90,17 @@ export function KakaoMapView({
     readyRef.current = false;
   }, [html]);
 
+  const myLocationRef = useRef<LatLng | null>(myLocation);
+  const myLat = myLocation?.latitude;
+  const myLng = myLocation?.longitude;
+  useEffect(() => {
+    const next =
+      myLat === undefined || myLng === undefined ? null : { latitude: myLat, longitude: myLng };
+    myLocationRef.current = next;
+    if (!readyRef.current) return;
+    getApi()?.setMyLocation(next?.latitude ?? null, next?.longitude ?? null);
+  }, [myLat, myLng, getApi]);
+
   const selectedLat = selectedPosition?.latitude;
   const selectedLng = selectedPosition?.longitude;
   useEffect(() => {
@@ -104,9 +125,15 @@ export function KakaoMapView({
     getApi()?.setMarkers(markerPayload);
   }, [markerPayload, getApi]);
 
-  // 마커를 누를 때 생기는 요청이라 지도가 이미 준비된 뒤다. 준비 전 요청은 버린다.
+  // 준비 전에 온 요청(예: 등록 직후 돌아왔는데 지도가 다시 로드되는 중)은 들고 있다가 'ready' 때 적용한다.
+  const pendingFocusRef = useRef<MapFocusRequest | null>(null);
   useEffect(() => {
-    if (!focusRequest || !readyRef.current) return;
+    if (!focusRequest) return;
+    if (!readyRef.current) {
+      pendingFocusRef.current = focusRequest;
+      return;
+    }
+    pendingFocusRef.current = null;
     getApi()?.focusOn(focusRequest.latitude, focusRequest.longitude, focusRequest.offsetY);
   }, [focusRequest, getApi]);
 
@@ -126,6 +153,21 @@ export function KakaoMapView({
     });
   }, [geocodeRequest, kakaoJsKey]);
 
+  // 장소 검색도 주소 조회와 같은 이유로 이 페이지에서 한다.
+  const onPlaceSearchResultRef = useRef(onPlaceSearchResult);
+  onPlaceSearchResultRef.current = onPlaceSearchResult;
+  useEffect(() => {
+    if (!placeSearchRequest) return;
+    const { id, query } = placeSearchRequest;
+    if (!kakaoJsKey) {
+      onPlaceSearchResultRef.current?.({ id, places: [], failed: true });
+      return;
+    }
+    void searchPlacesOnWeb(kakaoJsKey, query).then((result) => {
+      onPlaceSearchResultRef.current?.({ id, ...result });
+    });
+  }, [placeSearchRequest, kakaoJsKey]);
+
   const handleMessage = useCallback(
     (message: KakaoMapMessage) => {
       switch (message.type) {
@@ -138,6 +180,16 @@ export function KakaoMapView({
             selectedRef.current?.latitude ?? null,
             selectedRef.current?.longitude ?? null,
           );
+          api?.setMyLocation(
+            myLocationRef.current?.latitude ?? null,
+            myLocationRef.current?.longitude ?? null,
+          );
+          // setCenter 다음에 적용해야 중심을 덮어쓰지 않는다.
+          const pendingFocus = pendingFocusRef.current;
+          if (pendingFocus) {
+            api?.focusOn(pendingFocus.latitude, pendingFocus.longitude, pendingFocus.offsetY);
+            pendingFocusRef.current = null;
+          }
           break;
         }
         case 'idle':
@@ -147,6 +199,9 @@ export function KakaoMapView({
             level: message.level,
             radius: message.radius,
           });
+          break;
+        case 'dragstart':
+          onUserDrag?.();
           break;
         case 'markerPress':
           onMarkerPress?.(message.spotId);
@@ -165,7 +220,7 @@ export function KakaoMapView({
           break;
       }
     },
-    [getApi, onRegionChange, onMarkerPress, onMapPress, onGeocodeResult],
+    [getApi, onRegionChange, onMarkerPress, onMapPress, onUserDrag, onGeocodeResult],
   );
 
   useEffect(() => {

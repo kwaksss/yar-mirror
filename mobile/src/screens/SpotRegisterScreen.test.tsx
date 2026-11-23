@@ -132,7 +132,9 @@ describe('SpotRegisterScreen address auto-fill', () => {
     await waitFor(() =>
       expect(mockCreateSpot).toHaveBeenCalledWith(expect.objectContaining({ address: undefined })),
     );
-    expect(navigation.navigate).toHaveBeenCalledWith('Map');
+    expect(navigation.navigate).toHaveBeenCalledWith('Map', {
+      focus: { latitude: expect.any(Number), longitude: expect.any(Number) },
+    });
   });
 
   it('does not block registration while the lookup is still pending', async () => {
@@ -145,6 +147,80 @@ describe('SpotRegisterScreen address auto-fill', () => {
     await waitFor(() =>
       expect(mockCreateSpot).toHaveBeenCalledWith(expect.objectContaining({ address: undefined })),
     );
-    expect(navigation.navigate).toHaveBeenCalledWith('Map');
+    expect(navigation.navigate).toHaveBeenCalledWith('Map', {
+      focus: { latitude: expect.any(Number), longitude: expect.any(Number) },
+    });
+  });
+});
+
+describe('SpotRegisterScreen place search', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockCreateSpot.mockResolvedValue({
+      spotId: 42,
+      photoUploadStatus: 'PENDING',
+      photoUrl: 'http://localhost:8080/local-storage/spots/uuid.jpg',
+      uploadUrl: 'http://localhost:8080/local-storage/spots/uuid.jpg',
+      uploadMethod: 'PUT',
+      uploadUrlExpiresAt: '2026-01-01T00:10:00Z',
+    });
+    mockUploadPhoto.mockResolvedValue(undefined);
+    mockConfirmUpload.mockResolvedValue({ id: 42 });
+  });
+
+  it('moves the pin to the picked search result and registers there', async () => {
+    await renderScreen();
+
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('place-search-input'), '망원역');
+    });
+    await act(async () => {
+      fireEvent(screen.getByTestId('place-search-input'), 'submitEditing');
+    });
+    expect(screen.getByTestId('place-search-results')).toHaveTextContent(/검색 중/);
+
+    await replyWithAddress({
+      type: 'places',
+      id: 1,
+      failed: false,
+      places: [
+        { name: '망원역 6호선', address: '서울 마포구 월드컵로 지하 77', latitude: 37.5559, longitude: 126.9101 },
+      ],
+    });
+    await act(async () => {
+      fireEvent.press(screen.getByTestId('place-search-result-0'));
+    });
+    expect(screen.queryByTestId('place-search-results')).toBeNull();
+
+    // 핀이 옮겨졌으니 새 좌표로 주소를 다시 조회한다(두 번째 요청, id 2).
+    await replyWithAddress({
+      type: 'geocode',
+      id: 2,
+      roadAddress: '서울 마포구 월드컵로 지하 77',
+      lotAddress: null,
+    });
+    expect(screen.getByTestId('resolved-address')).toHaveTextContent(/월드컵로 지하 77/);
+
+    await fillFormAndSubmit();
+
+    await waitFor(() =>
+      expect(mockCreateSpot).toHaveBeenCalledWith(
+        expect.objectContaining({ latitude: 37.5559, longitude: 126.9101 }),
+      ),
+    );
+  });
+
+  it('says so when nothing matches', async () => {
+    await renderScreen();
+
+    await act(async () => {
+      fireEvent.changeText(screen.getByTestId('place-search-input'), 'ㅁㄴㅇㄹ');
+    });
+    await act(async () => {
+      fireEvent(screen.getByTestId('place-search-input'), 'submitEditing');
+    });
+    await replyWithAddress({ type: 'places', id: 1, failed: false, places: [] });
+
+    expect(screen.getByTestId('place-search-results')).toHaveTextContent(/검색 결과가 없어요/);
   });
 });

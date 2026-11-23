@@ -11,12 +11,16 @@ jest.mock('../api/spots', () => ({
   fetchNearbySpots: (...args: unknown[]) => mockFetchNearbySpots(...args),
 }));
 
+// 실시간 내 위치. 테스트에서 바꾼 뒤 다시 렌더링하면 위치가 갱신된 것처럼 보인다.
+let mockMyPosition: { latitude: number; longitude: number } | null = null;
+
 jest.mock('../hooks/useCurrentLocation', () => ({
   useCurrentLocation: () => ({
     center: { latitude: 37.5665, longitude: 126.978 },
     usingFallback: false,
     permission: 'granted',
     requestPermission: jest.fn(),
+    myPosition: mockMyPosition,
   }),
 }));
 
@@ -123,5 +127,149 @@ describe('MapScreen spot preview', () => {
       .map((call) => String(call[0]))
       .find((script) => script.includes('focusOn'));
     expect(focus).toContain('focusOn(37.5445, 127.0557,');
+  });
+
+  it('pans to the newly registered spot when returning from registration', async () => {
+    const { rerender } = await renderScreen();
+    await post({ type: 'ready' });
+    mockInjectJavaScript.mockClear();
+
+    await rerender(
+      <MapScreen
+        navigation={navigation as never}
+        route={
+          {
+            key: 'Map',
+            name: 'Map',
+            params: { focus: { latitude: 37.55, longitude: 127.04 } },
+          } as never
+        }
+      />,
+    );
+
+    const focus = mockInjectJavaScript.mock.calls
+      .map((call) => String(call[0]))
+      .find((script) => script.includes('focusOn'));
+    expect(focus).toContain('focusOn(37.55, 127.04, 0)');
+  });
+});
+
+describe('MapScreen place search', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetSpots();
+    mockFetchNearbySpots.mockResolvedValue([spot]);
+  });
+
+  it('searches through the map SDK and pans to the picked place', async () => {
+    await renderScreen();
+    await post({ type: 'ready' });
+    mockInjectJavaScript.mockClear();
+
+    await fireEvent.changeText(screen.getByTestId('place-search-input'), '망원역');
+    await fireEvent(screen.getByTestId('place-search-input'), 'submitEditing');
+
+    const searchScript = mockInjectJavaScript.mock.calls
+      .map((call) => String(call[0]))
+      .find((script) => script.includes('searchPlaces'));
+    expect(searchScript).toContain('searchPlaces(1, "망원역")');
+
+    await post({
+      type: 'places',
+      id: 1,
+      failed: false,
+      places: [{ name: '망원역 6호선', address: null, latitude: 37.5559, longitude: 126.9101 }],
+    });
+    await fireEvent.press(screen.getByTestId('place-search-result-0'));
+
+    const focus = mockInjectJavaScript.mock.calls
+      .map((call) => String(call[0]))
+      .find((script) => script.includes('focusOn'));
+    expect(focus).toContain('focusOn(37.5559, 126.9101, 0)');
+    expect(screen.queryByTestId('place-search-results')).toBeNull();
+  });
+});
+
+describe('MapScreen my location', () => {
+  const focusScripts = () =>
+    mockInjectJavaScript.mock.calls
+      .map((call) => String(call[0]))
+      .filter((script) => script.includes('focusOn'));
+
+  const rerenderScreen = (rerender: (element: React.ReactElement) => unknown) =>
+    rerender(
+      <MapScreen
+        navigation={navigation as never}
+        route={{ key: 'Map', name: 'Map', params: undefined } as never}
+      />,
+    );
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    resetSpots();
+    mockFetchNearbySpots.mockResolvedValue([spot]);
+    mockMyPosition = { latitude: 37.55, longitude: 126.91 };
+  });
+
+  afterAll(() => {
+    mockMyPosition = null;
+  });
+
+  it('draws my location without moving the map until the button is pressed', async () => {
+    const { rerender } = await renderScreen();
+    await post({ type: 'ready' });
+    expect(
+      mockInjectJavaScript.mock.calls.some((call) =>
+        String(call[0]).includes('setMyLocation(37.55, 126.91)'),
+      ),
+    ).toBe(true);
+    mockInjectJavaScript.mockClear();
+
+    mockMyPosition = { latitude: 37.551, longitude: 126.91 };
+    await rerenderScreen(rerender);
+
+    expect(focusScripts()).toEqual([]);
+    expect(
+      mockInjectJavaScript.mock.calls.some((call) =>
+        String(call[0]).includes('setMyLocation(37.551, 126.91)'),
+      ),
+    ).toBe(true);
+  });
+
+  it('pans to me on the button and keeps following as I move', async () => {
+    const { rerender } = await renderScreen();
+    await post({ type: 'ready' });
+    mockInjectJavaScript.mockClear();
+
+    await fireEvent.press(screen.getByTestId('my-location-button'));
+    expect(focusScripts()).toEqual([expect.stringContaining('focusOn(37.55, 126.91, 0)')]);
+
+    mockMyPosition = { latitude: 37.552, longitude: 126.912 };
+    await rerenderScreen(rerender);
+
+    expect(focusScripts()).toHaveLength(2);
+    expect(focusScripts()[1]).toContain('focusOn(37.552, 126.912, 0)');
+  });
+
+  it('stops following once the user drags the map', async () => {
+    const { rerender } = await renderScreen();
+    await post({ type: 'ready' });
+    await fireEvent.press(screen.getByTestId('my-location-button'));
+    await post({ type: 'dragstart' });
+    mockInjectJavaScript.mockClear();
+
+    mockMyPosition = { latitude: 37.553, longitude: 126.913 };
+    await rerenderScreen(rerender);
+
+    expect(focusScripts()).toEqual([]);
+  });
+
+  it('hides the button while the preview sheet is open', async () => {
+    await renderScreen();
+    await waitFor(() => expect(screen.getByTestId('nearby-count')).toHaveTextContent('주변 1곳'));
+
+    await post({ type: 'markerPress', spotId: 42 });
+
+    expect(screen.queryByTestId('my-location-button')).toBeNull();
   });
 });

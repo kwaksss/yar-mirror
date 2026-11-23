@@ -1,4 +1,5 @@
 import type { KakaoAddressPayload } from '../utils/address';
+import type { Place } from '../hooks/usePlaceSearch';
 
 /**
  * 웹 전용 역지오코딩.
@@ -27,7 +28,10 @@ type KakaoServices = {
           callback: (result: unknown, status: unknown) => void,
         ) => void;
       };
-      Status: { OK: string };
+      Places: new () => {
+        keywordSearch: (query: string, callback: (result: unknown, status: unknown) => void) => void;
+      };
+      Status: { OK: string; ZERO_RESULT: string };
     };
   };
 };
@@ -110,6 +114,55 @@ export async function reverseGeocodeOnWeb(
       });
     } catch {
       resolve(EMPTY);
+    }
+  });
+}
+
+type KakaoPlaceDoc = {
+  place_name?: string;
+  road_address_name?: string;
+  address_name?: string;
+  x?: string;
+  y?: string;
+};
+
+/**
+ * 검색어로 장소를 찾는다. 주소 조회와 같은 이유로 iframe 이 아니라 이 페이지에서 부른다.
+ * 결과 0건은 failed: false 와 빈 목록이다.
+ */
+export async function searchPlacesOnWeb(
+  jsKey: string,
+  query: string,
+): Promise<{ places: Place[]; failed: boolean }> {
+  const failed = { places: [], failed: true };
+  let kakao: KakaoServices;
+  try {
+    kakao = await loadServices(jsKey);
+  } catch {
+    return failed;
+  }
+
+  return new Promise((resolve) => {
+    try {
+      new kakao.maps.services.Places().keywordSearch(query, (result, status) => {
+        const { OK, ZERO_RESULT } = kakao.maps.services.Status;
+        if (status !== OK && status !== ZERO_RESULT) {
+          resolve(failed);
+          return;
+        }
+        const docs = (status === OK && Array.isArray(result) ? result : []) as KakaoPlaceDoc[];
+        resolve({
+          failed: false,
+          places: docs.map((doc) => ({
+            name: doc.place_name ?? '',
+            address: doc.road_address_name || doc.address_name || null,
+            latitude: Number(doc.y),
+            longitude: Number(doc.x),
+          })),
+        });
+      });
+    } catch {
+      resolve(failed);
     }
   });
 }

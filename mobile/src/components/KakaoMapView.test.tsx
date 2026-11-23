@@ -286,4 +286,51 @@ describe('KakaoMapView marker injection', () => {
     expect(focusScripts).toHaveLength(2);
     expect(focusScripts[0]).toContain('focusOn(37.5445, 127.0557, 160)');
   });
+
+  it('applies a focus request that arrived before ready after recentring', async () => {
+    await render(
+      <KakaoMapView
+        center={{ latitude: 37.5665, longitude: 126.978 }}
+        focusRequest={{ id: 1, latitude: 37.5445, longitude: 127.0557, offsetY: 0 }}
+      />,
+    );
+    expect(injectedScripts().some((s) => s.includes('focusOn'))).toBe(false);
+
+    await post({ type: 'ready' });
+
+    const scripts = injectedScripts();
+    const centerIndex = scripts.findIndex((s) => s.includes('setCenter'));
+    const focusIndex = scripts.findIndex((s) => s.includes('focusOn(37.5445, 127.0557, 0)'));
+    expect(focusIndex).toBeGreaterThan(centerIndex);
+  });
+
+  it('replays my location on ready and moves the dot as it changes', async () => {
+    const center = { latitude: 37.5665, longitude: 126.978 };
+    const { rerender } = await render(
+      <KakaoMapView center={center} myLocation={{ latitude: 37.5, longitude: 127 }} />,
+    );
+    expect(injectedScripts().some((s) => s.includes('setMyLocation'))).toBe(false);
+
+    await post({ type: 'ready' });
+    expect(injectedScripts().find((s) => s.includes('setMyLocation'))).toContain(
+      'setMyLocation(37.5, 127)',
+    );
+
+    mockInjectJavaScript.mockClear();
+    await rerender(<KakaoMapView center={center} myLocation={{ latitude: 37.51, longitude: 127 }} />);
+    expect(injectedScripts().filter((s) => s.includes('setMyLocation'))).toEqual([
+      expect.stringContaining('setMyLocation(37.51, 127)'),
+    ]);
+  });
+
+  it('reports the start of a user drag', async () => {
+    const onUserDrag = jest.fn();
+    await render(
+      <KakaoMapView center={{ latitude: 37.5665, longitude: 126.978 }} onUserDrag={onUserDrag} />,
+    );
+
+    await post({ type: 'dragstart' });
+
+    expect(onUserDrag).toHaveBeenCalledTimes(1);
+  });
 });

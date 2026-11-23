@@ -45,7 +45,7 @@ export function LoginScreen() {
           <View style={styles.mirrorGlint} />
         </View>
         <Text style={styles.title}>거울샷 스팟</Text>
-        <Text style={styles.subtitle}>근처에서 전신거울 샷 찍기 좋은 곳을 찾아보세요</Text>
+        <Text style={styles.subtitle}>근처에서 거울 샷 찍기 좋은 곳을 찾아보세요</Text>
       </View>
 
       <Pressable

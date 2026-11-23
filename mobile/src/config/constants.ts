@@ -10,4 +10,6 @@ export const DEFAULT_MAP_LEVEL = 5;
 export const DEFAULT_SEARCH_RADIUS_M = 2000;
 export const REGION_DEBOUNCE_MS = 500;
 export const LOCATION_TIMEOUT_MS = 5000;
+/** 실시간 내 위치를 이만큼(m) 움직일 때마다 갱신한다. */
+export const LOCATION_WATCH_DISTANCE_M = 5;
 export const GEOCODE_TIMEOUT_MS = 5000;

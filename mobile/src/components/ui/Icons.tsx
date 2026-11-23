@@ -52,6 +52,56 @@ export function PlusIcon({ size = 14, color = colors.paper, weight = 2.25 }: Ico
   );
 }
 
+/** 돋보기. 동그라미와 오른쪽 아래 손잡이. */
+export function SearchIcon({ size = 18, color = colors.muted, weight = 2 }: IconProps) {
+  const lens = size * 0.68;
+  const handle = size * 0.34;
+  return (
+    <View style={{ width: size, height: size }}>
+      <View
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: lens,
+          height: lens,
+          borderRadius: lens / 2,
+          borderWidth: weight,
+          borderColor: color,
+        }}
+      />
+      <View
+        style={{
+          position: 'absolute',
+          width: handle,
+          height: weight,
+          borderRadius: weight,
+          backgroundColor: color,
+          left: lens - handle * 0.3,
+          top: lens + handle * 0.05,
+          transform: [{ rotate: '45deg' }],
+        }}
+      />
+    </View>
+  );
+}
+
+/** 내 위치 버튼 아이콘. 테두리 원 안의 점. 따라가기 중이면 강조색, 아니면 회색. */
+export function LocateIcon({ size = 20, active = false }: { size?: number; active?: boolean }) {
+  const color = active ? colors.accent : colors.muted;
+  const dot = size * 0.4;
+  return (
+    <View
+      style={[
+        styles.box,
+        { width: size, height: size, borderRadius: size / 2, borderWidth: 2, borderColor: color },
+      ]}
+    >
+      <View style={{ width: dot, height: dot, borderRadius: dot / 2, backgroundColor: color }} />
+    </View>
+  );
+}
+
 /** 위치 핀을 단순화한 점. 주소 줄 앞에 붙인다. */
 export function PinDot({ size = 8, color = colors.accent }: { size?: number; color?: string }) {
   return (

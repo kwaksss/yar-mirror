@@ -1,3 +1,10 @@
+/** 다른 파일에서 기능 가져오기 
+React 라이브러리를 가져온다.
+useCallback :  함수를 재사용하기 위한 Hook.
+useEffect : 화면 렌더링 이후 특정 작업을 실행하기 위한 Hook.
+useRef : 렌더링과 별개로 값을 유지하기 위한 Hook.
+usetState : 화면 상태를 저장하기 위한 Hook.
+*/
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { fetchNearbySpots } from '../api/spots';
@@ -23,14 +30,35 @@ import { formatDistance, haversineMeters } from '../utils/distance';
 /** 화면 위쪽에 떠 있는 제목 바가 차지하는 높이(여백 12 + 바 52). */
 const TITLE_BAR_OFFSET = 64;
 
+/** 
+export : 다른 파일에서도 이 컴포넌트를 가져다 사용할 수 있게 공개.
+function MapScreen : MapScreen 이라는 함수 선언
+navigation, route : 전달받은 객체에서 navigation, route를 꺼내는 구조 분해 할당.
+RootScreenProps<'Map'> : 이 화면에서 사용하는 객체의 타입을 지정.
+-> MapScreen.jsp라는 화면을 만든다고 생각. 다만, React에서는 이 함수가 화면 컴포넌트.
+*/
 export function MapScreen({ navigation, route }: RootScreenProps<'Map'>) {
+  /** useCurrentLocaton()을 실행하고 center, usingFallback, permission등의 반환값을 꺼낸다.
+      watch : true -> 위치를 한번만 가져오는것이 아니라 위치 변화를 계속 감시하겠다.
+  */
   const { center, usingFallback, permission, requestPermission, myPosition } = useCurrentLocation({
     watch: true,
   });
+
+  /** 공유 저장소에 저장된 스팟 목록 가져온다. */
   const spots = useSpots();
   const insets = useInsets();
+
+  /** 오류 메시지를 관리하는 상태.
+      error : 현재 오류 메시지.
+      setError : 오류 메시지를 변경하는 함수.
+      string | null : 문자열 또는 null이 들어갈 수 없음.
+      null : 최초에는 오류가 없음.
+  */
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
+
+  // 주변 스팟 데이터를 불러왔는지 관리하는 상태 : 처음에는 false, 조회가 완료되면 true
   const [selected, setSelected] = useState<Spot | null>(null);
   // 상세 화면에서 돌아오면 시트를 다시 절반 높이로 올려 놓는다(끌어 올린 채로 남지 않게).
   const [sheetKey, setSheetKey] = useState(0);

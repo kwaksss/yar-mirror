@@ -42,13 +42,23 @@ export type CurrentLocationOptions = {
 };
 
 // 걸으며 움직이는 점을 보여 주려면 GPS 가 필요하다. Balanced 는 iOS 에서 약 100m 정밀도라 50m 이동도 놓친다.
-// 웹에서는 expo-location 이 옵션을 navigator.geolocation 에 그대로 넘기고 accuracy 는 무시되므로,
-// enableHighAccuracy 를 직접 켜야 Safari 가 Wi-Fi 추정 대신 GPS 를 쓴다.
-const WATCH_OPTIONS = {
+const WATCH_OPTIONS: Location.LocationOptions = {
   accuracy: Location.Accuracy.High,
   distanceInterval: LOCATION_WATCH_DISTANCE_M,
-  ...(Platform.OS === 'web' ? { enableHighAccuracy: true } : {}),
-} as Location.LocationOptions;
+};
+
+function watchPosition(onFix: (fix: LatLng) => void): Promise<{ remove: () => void }> {
+  const toFix = (position: { coords: LatLng }) =>
+    onFix({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+  if (Platform.OS === 'web') {
+    // expo-location 웹 구현은 이벤트에 자기 id 대신 브라우저 watch id 를 실어 보내, 콜백을 못 찾고
+    // 첫 갱신에서 clearWatch 해 버린다. 그래서 브라우저에 콜백을 직접 넘긴다.
+    // enableHighAccuracy 를 켜야 Safari 가 Wi-Fi 추정 대신 GPS 를 쓴다. distanceInterval 은 브라우저에 없다.
+    const id = navigator.geolocation.watchPosition(toFix, undefined, { enableHighAccuracy: true });
+    return Promise.resolve({ remove: () => navigator.geolocation.clearWatch(id) });
+  }
+  return Location.watchPositionAsync(WATCH_OPTIONS, toFix);
+}
 
 export function useCurrentLocation({ watch = false }: CurrentLocationOptions = {}): CurrentLocation {
   const [center, setCenter] = useState<LatLng>(FALLBACK_CENTER);
@@ -61,14 +71,7 @@ export function useCurrentLocation({ watch = false }: CurrentLocationOptions = {
   const startWatching = useCallback(async () => {
     if (!watch || subscriptionRef.current) return;
     try {
-      const subscription = await Location.watchPositionAsync(
-        WATCH_OPTIONS,
-        (position) =>
-          setMyPosition({
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-          }),
-      );
+      const subscription = await watchPosition(setMyPosition);
       // 구독이 시작되기 전에 화면을 떠났으면 바로 끊는다.
       if (unmountedRef.current) subscription.remove();
       else subscriptionRef.current = subscription;

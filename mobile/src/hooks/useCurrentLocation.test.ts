@@ -1,4 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { Platform } from 'react-native';
 import * as Location from 'expo-location';
 import { useCurrentLocation } from './useCurrentLocation';
 import { FALLBACK_CENTER, LOCATION_TIMEOUT_MS } from '../config/constants';
@@ -17,6 +18,7 @@ const gangnam = { latitude: 37.4979, longitude: 127.0276 };
 
 describe('useCurrentLocation', () => {
   beforeEach(() => jest.clearAllMocks());
+  afterEach(() => jest.restoreAllMocks());
 
   it('centres on the device position when permission is granted', async () => {
     mocked.requestForegroundPermissionsAsync.mockResolvedValue({
@@ -139,6 +141,31 @@ describe('useCurrentLocation', () => {
 
       await unmount();
       expect(remove).toHaveBeenCalled();
+    });
+
+    it('on web, hands the callback straight to the browser and clears that watch', async () => {
+      jest.replaceProperty(Platform, 'OS', 'web');
+      grantWithFix();
+      let emit: (position: unknown) => void = () => undefined;
+      const geolocation = {
+        watchPosition: jest.fn((callback) => {
+          emit = callback;
+          return 7;
+        }),
+        clearWatch: jest.fn(),
+      };
+      Object.defineProperty(global.navigator, 'geolocation', { value: geolocation, configurable: true });
+
+      const { result, unmount } = await renderHook(() => useCurrentLocation({ watch: true }));
+
+      await waitFor(() => expect(geolocation.watchPosition).toHaveBeenCalled());
+      expect(mocked.watchPositionAsync).not.toHaveBeenCalled();
+      const moved = { latitude: 37.4985, longitude: 127.028 };
+      await act(async () => emit({ coords: moved }));
+      expect(result.current.myPosition).toEqual(moved);
+
+      await unmount();
+      expect(geolocation.clearWatch).toHaveBeenCalledWith(7);
     });
 
     it('never subscribes when permission is denied', async () => {
